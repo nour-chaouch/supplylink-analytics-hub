@@ -1,7 +1,21 @@
 
 import React, { useState } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
-import { LineChart, BarChart3, TrendingUp, User, Package, Map, Calendar, ArrowUpRight } from 'lucide-react';
+import { 
+  LineChart, 
+  BarChart3, 
+  TrendingUp, 
+  User, 
+  Package, 
+  Map, 
+  Calendar, 
+  ArrowUpRight,
+  Truck,
+  AlertTriangle,
+  ShieldCheck,
+  File,
+  FileText
+} from 'lucide-react';
 import DashboardSidebar from '@/components/DashboardSidebar';
 import DashboardHeader from '@/components/DashboardHeader';
 import DataCard from '@/components/DataCard';
@@ -71,28 +85,6 @@ const Dashboard = () => {
   };
   
   const config = dashboardConfig[role as keyof typeof dashboardConfig];
-
-  // Import required icons based on role
-  let Truck, AlertTriangle, ShieldCheck, File, FileText;
-  
-  // Import icons only when needed, based on the current role
-  if (role === 'transporter') {
-    // We use dynamic imports to avoid circular dependencies
-    import('lucide-react').then(module => {
-      Truck = module.Truck;
-    });
-  }
-  
-  if (role === 'manager' || role === 'regulator') {
-    import('lucide-react').then(module => {
-      AlertTriangle = module.AlertTriangle;
-      if (role === 'regulator') {
-        ShieldCheck = module.ShieldCheck;
-        File = module.File;
-        FileText = module.FileText;
-      }
-    });
-  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-supply-50">
