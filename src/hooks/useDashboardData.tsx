@@ -8,6 +8,13 @@ interface UseDataOptions {
   onError?: (error: Error) => void;
 }
 
+// Define the response type to match what our API actually returns
+interface ApiResponse {
+  data: any;
+  success: boolean;
+  error?: string; // Make error optional since it might not always be present
+}
+
 export function useDashboardData(role: string, endpoint: string = 'getDashboardData', options: UseDataOptions = {}) {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -31,7 +38,7 @@ export function useDashboardData(role: string, endpoint: string = 'getDashboardD
           throw new Error(`Endpoint "${endpoint}" not found for role: ${role}`);
         }
         
-        const response = await apiFunction();
+        const response = await apiFunction() as ApiResponse;
         
         if (response.success) {
           setData(response.data);
@@ -39,8 +46,7 @@ export function useDashboardData(role: string, endpoint: string = 'getDashboardD
             options.onSuccess(response.data);
           }
         } else {
-          // Change this part - since error property might not exist in the response
-          // We'll create an error with the message from response if it exists
+          // Since error might not exist in the response, provide a default message
           const errorMessage = response.error || 'Failed to fetch data';
           throw new Error(errorMessage);
         }
@@ -64,7 +70,6 @@ export function useDashboardData(role: string, endpoint: string = 'getDashboardD
   }, [role, endpoint, options, toast]);
 
   const refetch = async () => {
-    // Implement a proper refetch function
     setIsLoading(true);
     setError(null);
     
@@ -79,7 +84,7 @@ export function useDashboardData(role: string, endpoint: string = 'getDashboardD
         throw new Error(`Endpoint "${endpoint}" not found for role: ${role}`);
       }
       
-      const response = await apiFunction();
+      const response = await apiFunction() as ApiResponse;
       
       if (response.success) {
         setData(response.data);
@@ -87,7 +92,8 @@ export function useDashboardData(role: string, endpoint: string = 'getDashboardD
           options.onSuccess(response.data);
         }
       } else {
-        const errorMessage = typeof response.error === 'string' ? response.error : 'Failed to fetch data';
+        // Ensure we handle the case where error might not be defined
+        const errorMessage = response.error || 'Failed to fetch data';
         throw new Error(errorMessage);
       }
     } catch (err) {
