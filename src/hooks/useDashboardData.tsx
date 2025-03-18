@@ -39,7 +39,10 @@ export function useDashboardData(role: string, endpoint: string = 'getDashboardD
             options.onSuccess(response.data);
           }
         } else {
-          throw new Error(response.error || 'Failed to fetch data');
+          // Change this part - since error property might not exist in the response
+          // We'll create an error with the message from response if it exists
+          const errorMessage = response.error || 'Failed to fetch data';
+          throw new Error(errorMessage);
         }
       } catch (err) {
         const error = err instanceof Error ? err : new Error('An unknown error occurred');
@@ -60,7 +63,50 @@ export function useDashboardData(role: string, endpoint: string = 'getDashboardD
     fetchData();
   }, [role, endpoint, options, toast]);
 
-  return { data, isLoading, error, refetch: () => {} };
+  const refetch = async () => {
+    // Implement a proper refetch function
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      if (!api[role as keyof typeof api]) {
+        throw new Error(`No API endpoints available for role: ${role}`);
+      }
+      
+      const apiFunction = api[role as keyof typeof api][endpoint as keyof typeof api[keyof typeof api]];
+      
+      if (!apiFunction) {
+        throw new Error(`Endpoint "${endpoint}" not found for role: ${role}`);
+      }
+      
+      const response = await apiFunction();
+      
+      if (response.success) {
+        setData(response.data);
+        if (options.onSuccess) {
+          options.onSuccess(response.data);
+        }
+      } else {
+        const errorMessage = typeof response.error === 'string' ? response.error : 'Failed to fetch data';
+        throw new Error(errorMessage);
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('An unknown error occurred');
+      setError(error);
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+      if (options.onError) {
+        options.onError(error);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { data, isLoading, error, refetch };
 }
 
 // Additional hooks for specific data needs
