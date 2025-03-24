@@ -1,6 +1,6 @@
-
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -20,6 +20,19 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { logout } from '@/store/slices/authSlice';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -91,8 +104,16 @@ const roleConfig = {
 };
 
 const DashboardSidebar = ({ collapsed, setCollapsed, role }: SidebarProps) => {
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
   const location = useLocation();
   const config = roleConfig[role];
+
+  const handleLogout = () => {
+    dispatch(logout());
+    navigate('/');
+  };
 
   return (
     <div className={cn(
@@ -161,13 +182,29 @@ const DashboardSidebar = ({ collapsed, setCollapsed, role }: SidebarProps) => {
             <Settings className="mr-3 h-5 w-5 flex-shrink-0" />
             {!collapsed && <span>Settings</span>}
           </Link>
-          <Link
-            to="/"
-            className="flex items-center rounded-lg px-3 py-2 text-sm text-supply-600 hover:bg-supply-100 hover:text-supply-900 transition-colors"
-          >
-            <LogOut className="mr-3 h-5 w-5 flex-shrink-0" />
-            {!collapsed && <span>Log out</span>}
-          </Link>
+          <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+            <AlertDialogTrigger asChild>
+              <button
+                className="flex items-center rounded-lg px-3 py-2 text-sm text-supply-600 hover:bg-supply-100 hover:text-supply-900 transition-colors"
+                onClick={() => setShowLogoutDialog(true)}
+              >
+                <LogOut className="mr-3 h-5 w-5 flex-shrink-0" />
+                {!collapsed && <span>Log out</span>}
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure you want to log out?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  You will need to sign in again to access your dashboard.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setShowLogoutDialog(false)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleLogout}>Log out</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
     </div>

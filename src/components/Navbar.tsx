@@ -1,12 +1,16 @@
-
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, ChevronDown } from 'lucide-react';
 import { cn } from "@/lib/utils";
+import { useSelector } from 'react-redux';
+import { selectCurrentUser } from '@/store/slices/authSlice';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const user = useSelector(selectCurrentUser);
+  const location = useLocation();
+  const isDashboard = location.pathname.includes('/dashboard');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -37,6 +41,10 @@ const Navbar = () => {
     },
     { name: 'Contact', href: '#contact' },
   ];
+
+  if (isDashboard) {
+    return null; // Don't show navbar in dashboard
+  }
 
   return (
     <nav 
@@ -94,18 +102,14 @@ const Navbar = () => {
           </div>
 
           <div className="hidden md:flex md:items-center md:space-x-4">
-            <Link 
-              to="/login" 
-              className="text-sm font-medium text-supply-700 hover:text-primary transition-colors"
-            >
-              Log in
-            </Link>
-            <Link 
-              to="/dashboard"
-              className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
-            >
-              Dashboard
-            </Link>
+            {!user && (
+              <Link 
+                to="/login" 
+                className="text-sm font-medium text-supply-700 hover:text-primary transition-colors"
+              >
+                Log in
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -155,20 +159,15 @@ const Navbar = () => {
           </div>
           <div className="pt-4 pb-3 border-t border-supply-100">
             <div className="flex items-center px-4 space-x-3">
-              <Link 
-                to="/login" 
-                className="block w-full text-center py-2 text-base font-medium text-supply-700 hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Log in
-              </Link>
-              <Link 
-                to="/dashboard"
-                className="block w-full text-center py-2 text-base font-medium bg-primary text-white rounded-md hover:bg-primary/90"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Dashboard
-              </Link>
+              {!user && (
+                <Link 
+                  to="/login" 
+                  className="block w-full text-center py-2 text-base font-medium text-supply-700 hover:text-primary"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Log in
+                </Link>
+              )}
             </div>
           </div>
         </div>

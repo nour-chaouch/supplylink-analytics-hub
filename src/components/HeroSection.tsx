@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
@@ -31,6 +30,14 @@ const HeroSection = () => {
       }
     };
   }, []);
+
+  const handleLearnMoreClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    const aboutSection = document.querySelector('#about');
+    if (aboutSection) {
+      aboutSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   return (
     <div 
@@ -69,20 +76,13 @@ const HeroSection = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4 animate-slide-up animation-delay-300">
-            <Link 
-              to="/dashboard" 
-              className="inline-flex h-12 items-center justify-center rounded-md bg-primary px-6 text-sm font-medium text-white shadow transition-all duration-300 hover:bg-primary/90 hover:shadow-lg hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/50"
-            >
-              Explore Dashboards
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-            
-            <Link 
-              to="#about" 
+            <a
+              href="#about"
+              onClick={handleLearnMoreClick}
               className="inline-flex h-12 items-center justify-center rounded-md border border-supply-200 bg-white px-6 text-sm font-medium text-supply-900 shadow-sm transition-all duration-300 hover:bg-supply-50 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
             >
               Learn More
-            </Link>
+            </a>
           </div>
         </div>
 
