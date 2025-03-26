@@ -23,6 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 interface UserProfileData {
   name: string;
@@ -40,6 +41,14 @@ interface UserProfileData {
 
 export default function UserProfile() {
   const user = useSelector(selectCurrentUser);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'profile';
+
+  const handleTabChange = (value: string) => {
+    navigate(`/profile?tab=${value}`);
+  };
+
   const { toast } = useToast();
   const [updateUser] = useUpdateUserMutation();
   const [isEditing, setIsEditing] = useState(false);
@@ -144,7 +153,16 @@ export default function UserProfile() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Tabs defaultValue="profile" className="w-full max-w-4xl mx-auto">
+      {/* Back to Dashboard Button */}
+      <div className="mb-4">
+        <Button
+          variant="outline"
+          onClick={() => navigate(-1)}
+        >
+          Back to Dashboard
+        </Button>
+      </div>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full max-w-4xl mx-auto">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="profile">Profile Information</TabsTrigger>
           <TabsTrigger value="settings">Account Settings</TabsTrigger>

@@ -176,7 +176,7 @@ const DashboardSidebar = ({ collapsed, setCollapsed, role }: SidebarProps) => {
             {!collapsed && <span>Notifications</span>}
           </Link>
           <Link
-            to="/settings"
+            to="/profile?tab=settings"
             className="flex items-center rounded-lg px-3 py-2 text-sm text-supply-600 hover:bg-supply-100 hover:text-supply-900 transition-colors"
           >
             <Settings className="mr-3 h-5 w-5 flex-shrink-0" />
