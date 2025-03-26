@@ -9,6 +9,16 @@ export interface User {
   role: UserRole;
   token: string;
   permissions?: string[];
+  // Profile fields
+  phone?: string;
+  address?: string;
+  company?: string;
+  bio?: string;
+  // Role-specific fields
+  farmSize?: number;
+  mainCrops?: string;
+  storeLocation?: string;
+  businessType?: string;
 }
 
 interface AuthState {

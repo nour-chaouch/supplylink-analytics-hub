@@ -1,6 +1,7 @@
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { logout, selectCurrentUser } from '@/store/slices/authSlice';
+import { User } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +25,10 @@ export default function DashboardNavbar() {
     navigate('/');
   };
 
+  const handleProfileClick = () => {
+    navigate('/profile');
+  };
+
   return (
     <nav className="bg-white shadow-sm">
       <div className="container mx-auto px-4 md:px-6">
@@ -35,6 +40,15 @@ export default function DashboardNavbar() {
           </div>
 
           <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative h-8 w-8 rounded-full"
+              onClick={handleProfileClick}
+            >
+              <User className="h-5 w-5" />
+            </Button>
+
             <span className="text-sm font-medium text-supply-700">
               Welcome, {user?.name}
             </span>

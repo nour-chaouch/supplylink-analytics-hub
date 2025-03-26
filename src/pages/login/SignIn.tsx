@@ -23,17 +23,46 @@ export default function SignIn() {
     e.preventDefault()
     try {
       const userData = await login({ email, password }).unwrap()
-      dispatch(setCredentials(userData))
+      dispatch(setCredentials({ ...userData, token: userData.token }))
+      
+      // Get user role and ensure it's lowercase for consistency
+      const role = userData.role.toLowerCase()
+      
+      // Navigate based on user role
+      switch (role) {
+        case 'farmer':
+          navigate('/dashboard/farmer')
+          break
+        case 'retailer':
+          navigate('/dashboard/retailer')
+          break
+        case 'transporter':
+          navigate('/dashboard/transporter')
+          break
+        case 'manager':
+          navigate('/dashboard/manager')
+          break
+        case 'regulator':
+          navigate('/dashboard/regulator')
+          break
+        default:
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Invalid user role",
+          })
+          return
+      }
+
       toast({
         title: "Success",
         description: "Successfully signed in!",
       })
-      navigate('/dashboard')
-    } catch (err: any) {
+    } catch (error) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: err?.data?.message || "Something went wrong",
+        description: "Invalid email or password",
       })
     }
   }

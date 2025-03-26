@@ -45,14 +45,20 @@ const HeroSection = () => {
       className="relative min-h-screen flex items-center justify-center overflow-hidden bg-grid-pattern"
       style={{ 
         '--mouse-x': '0.5', 
-        '--mouse-y': '0.5'
+        '--mouse-y': '0.5',
+        backgroundImage: 'url("/img/agr.jpg")',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
       } as React.CSSProperties}
     >
+      {/* Semi-transparent overlay */}
+      <div className="absolute inset-0 bg-background/50"></div>
+      
       {/* Gradient background */}
       <div 
         className="absolute inset-0 bg-gradient-radial from-primary/5 to-transparent opacity-70"
         style={{
-          background: `radial-gradient(circle at calc(var(--mouse-x) * 100%) calc(var(--mouse-y) * 100%), rgba(59, 130, 246, 0.15), transparent 70%)`
+          background: `radial-gradient(circle at calc(var(--mouse-x) * 100%) calc(var(--mouse-y) * 100%), rgba(59, 130, 246, 0.15), transparent 10%)`
         }}
       ></div>
       

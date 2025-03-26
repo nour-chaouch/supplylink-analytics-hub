@@ -27,6 +27,7 @@ import {
 import AuthNavbar from '@/components/AuthNavbar'
 import { useRegisterMutation } from '@/store/services/authApi'
 import { setCredentials } from '@/store/slices/authSlice'
+import { UserRole } from '@/store/slices/authSlice'
 
 export default function SignUp() {
   const [formData, setFormData] = useState({
@@ -34,7 +35,7 @@ export default function SignUp() {
     email: '',
     password: '',
     confirmPassword: '',
-    role: ''
+    role: 'farmer' as UserRole
   })
   const [showConfirmation, setShowConfirmation] = useState(false)
   const navigate = useNavigate()
@@ -58,19 +59,18 @@ export default function SignUp() {
 
   const handleConfirmSignUp = async () => {
     try {
-      const userData = await register({
+      await register({
         name: formData.name,
         email: formData.email,
         password: formData.password,
         role: formData.role
       }).unwrap()
       
-      dispatch(setCredentials(userData))
       toast({
         title: "Success",
-        description: "Account created successfully!",
+        description: "Account created successfully! Please sign in.",
       })
-      navigate('/dashboard')
+      navigate('/login')
     } catch (err: any) {
       toast({
         variant: "destructive",
@@ -78,6 +78,7 @@ export default function SignUp() {
         description: err?.data?.message || "Something went wrong",
       })
     }
+    setShowConfirmation(false)
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,7 +92,7 @@ export default function SignUp() {
   const handleRoleChange = (value: string) => {
     setFormData(prev => ({
       ...prev,
-      role: value
+      role: value as UserRole
     }))
   }
 

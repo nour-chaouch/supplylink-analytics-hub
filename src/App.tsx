@@ -12,14 +12,19 @@ import LazyLoad from "@/components/LazyLoad";
 
 // Eagerly load critical components
 import Index from "./pages/Index";
+import About from "./pages/About";
 import NotFound from "./pages/NotFound";
 import Unauthorized from "./pages/Unauthorized";
 import SignIn from "./pages/login/SignIn";
 import SignUp from "./pages/login/SignUp";
+import UserProfile from './components/profile/UserProfile';
 
-// Lazy load dashboard components
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const RegulatorCompliance = lazy(() => import('./components/RegulatorCompliance'));
+// Import role-specific dashboards
+import FarmerDashboard from './pages/dashboard/FarmerDashboard';
+import RetailerDashboard from './pages/dashboard/RetailerDashboard';
+import TransporterDashboard from './pages/dashboard/TransporterDashboard';
+import ManagerDashboard from './pages/dashboard/ManagerDashboard';
+import RegulatorDashboard from './pages/dashboard/RegulatorDashboard';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +46,7 @@ const App = () => (
             <Routes>
               {/* Public routes */}
               <Route path="/" element={<Index />} />
+              <Route path="/about" element={<About />} />
               <Route path="/login" element={<SignIn />} />
               <Route path="/login/signup" element={<SignUp />} />
               <Route path="/unauthorized" element={<Unauthorized />} />
@@ -50,11 +56,7 @@ const App = () => (
                 path="/dashboard/farmer"
                 element={
                   <ProtectedRoute allowedRoles={['farmer']}>
-                    <LazyLoad>
-                      <Suspense fallback={<div>Loading...</div>}>
-                        <Dashboard />
-                      </Suspense>
-                    </LazyLoad>
+                    <FarmerDashboard />
                   </ProtectedRoute>
                 }
               />
@@ -64,11 +66,7 @@ const App = () => (
                 path="/dashboard/retailer"
                 element={
                   <ProtectedRoute allowedRoles={['retailer']}>
-                    <LazyLoad>
-                      <Suspense fallback={<div>Loading...</div>}>
-                        <Dashboard />
-                      </Suspense>
-                    </LazyLoad>
+                    <RetailerDashboard />
                   </ProtectedRoute>
                 }
               />
@@ -78,11 +76,7 @@ const App = () => (
                 path="/dashboard/transporter"
                 element={
                   <ProtectedRoute allowedRoles={['transporter']}>
-                    <LazyLoad>
-                      <Suspense fallback={<div>Loading...</div>}>
-                        <Dashboard />
-                      </Suspense>
-                    </LazyLoad>
+                    <TransporterDashboard />
                   </ProtectedRoute>
                 }
               />
@@ -92,11 +86,7 @@ const App = () => (
                 path="/dashboard/manager"
                 element={
                   <ProtectedRoute allowedRoles={['manager']}>
-                    <LazyLoad>
-                      <Suspense fallback={<div>Loading...</div>}>
-                        <Dashboard />
-                      </Suspense>
-                    </LazyLoad>
+                    <ManagerDashboard />
                   </ProtectedRoute>
                 }
               />
@@ -106,31 +96,19 @@ const App = () => (
                 path="/dashboard/regulator"
                 element={
                   <ProtectedRoute allowedRoles={['regulator']}>
-                    <LazyLoad>
-                      <Suspense fallback={<div>Loading...</div>}>
-                        <Dashboard />
-                      </Suspense>
-                    </LazyLoad>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/dashboard/regulator/compliance"
-                element={
-                  <ProtectedRoute allowedRoles={['regulator']}>
-                    <LazyLoad>
-                      <Suspense fallback={<div>Loading...</div>}>
-                        <RegulatorCompliance />
-                      </Suspense>
-                    </LazyLoad>
+                    <RegulatorDashboard />
                   </ProtectedRoute>
                 }
               />
 
-              {/* Redirect /dashboard to role-specific dashboard if authenticated */}
+              {/* Profile route */}
               <Route
-                path="/dashboard"
-                element={<Navigate to="/login" replace />}
+                path="/profile"
+                element={
+                  <ProtectedRoute allowedRoles={['farmer', 'retailer', 'transporter', 'manager', 'regulator']}>
+                    <UserProfile />
+                  </ProtectedRoute>
+                }
               />
 
               {/* Catch-all route */}

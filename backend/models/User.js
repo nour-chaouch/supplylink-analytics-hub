@@ -26,6 +26,40 @@ const userSchema = new mongoose.Schema({
     enum: ['farmer', 'retailer', 'transporter', 'manager', 'regulator'],
     required: [true, 'Please specify a role']
   },
+  phone: {
+    type: String,
+    trim: true
+  },
+  address: {
+    type: String,
+    trim: true
+  },
+  company: {
+    type: String,
+    trim: true
+  },
+  bio: {
+    type: String,
+    trim: true
+  },
+  // Farmer specific fields
+  farmSize: {
+    type: Number,
+    default: 0
+  },
+  mainCrops: {
+    type: String,
+    trim: true
+  },
+  // Retailer specific fields
+  storeLocation: {
+    type: String,
+    trim: true
+  },
+  businessType: {
+    type: String,
+    trim: true
+  },
   createdAt: {
     type: Date,
     default: Date.now
