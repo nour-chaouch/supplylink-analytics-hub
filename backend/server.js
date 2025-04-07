@@ -3,6 +3,8 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
+const faostatRoutes = require('./routes/faostatRoutes');
+
 
 // Load env vars
 dotenv.config();
@@ -23,6 +25,7 @@ if (process.env.NODE_ENV === 'development') {
 
 // Routes
 app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api', faostatRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
