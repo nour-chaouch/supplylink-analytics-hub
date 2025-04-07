@@ -62,7 +62,7 @@ const Navbar = () => {
             className="flex items-center space-x-2"
           >
             <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600">
-              SupplyLink
+             E-Living Lab
             </span>
           </Link>
 

@@ -10,7 +10,7 @@ export default function AuthNavbar() {
             className="flex items-center space-x-2"
           >
             <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600">
-              SupplyLink
+              E-living Lab
             </span>
           </Link>
         </div>

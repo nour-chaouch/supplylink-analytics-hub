@@ -1,7 +1,6 @@
-
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
-import { api } from '@/backend/api';
+import { apiSlice } from '@/store/api/apiSlice';
 
 interface UseDataOptions {
   onSuccess?: (data: any) => void;
@@ -27,29 +26,21 @@ export function useDashboardData(role: string, endpoint: string = 'getDashboardD
       setError(null);
       
       try {
-        // Dynamically access the API endpoint based on role and endpoint name
-        if (!api[role as keyof typeof api]) {
-          throw new Error(`No API endpoints available for role: ${role}`);
+        // Use the apiSlice to fetch data from the backend
+        const response = await fetch(`http://localhost:5001/api/${role}/${endpoint}`);
+        
+        if (!response.ok) {
+          throw new Error(`API request failed with status: ${response.status}`);
         }
         
-        const apiFunction = api[role as keyof typeof api][endpoint as keyof typeof api[keyof typeof api]];
+        const result = await response.json();
         
-        if (!apiFunction) {
-          throw new Error(`Endpoint "${endpoint}" not found for role: ${role}`);
+        if (!result.success) {
+          throw new Error(result.error || 'Unknown API error');
         }
         
-        const response = await apiFunction() as ApiResponse;
-        
-        if (response.success) {
-          setData(response.data);
-          if (options.onSuccess) {
-            options.onSuccess(response.data);
-          }
-        } else {
-          // Since error might not exist in the response, provide a default message
-          const errorMessage = response.error || 'Failed to fetch data';
-          throw new Error(errorMessage);
-        }
+        setData(result.data);
+        options.onSuccess?.(result.data);
       } catch (err) {
         const error = err instanceof Error ? err : new Error('An unknown error occurred');
         setError(error);
@@ -74,28 +65,21 @@ export function useDashboardData(role: string, endpoint: string = 'getDashboardD
     setError(null);
     
     try {
-      if (!api[role as keyof typeof api]) {
-        throw new Error(`No API endpoints available for role: ${role}`);
+      // Use the apiSlice to fetch data from the backend
+      const response = await fetch(`http://localhost:5001/api/${role}/${endpoint}`);
+      
+      if (!response.ok) {
+        throw new Error(`API request failed with status: ${response.status}`);
       }
       
-      const apiFunction = api[role as keyof typeof api][endpoint as keyof typeof api[keyof typeof api]];
+      const result = await response.json();
       
-      if (!apiFunction) {
-        throw new Error(`Endpoint "${endpoint}" not found for role: ${role}`);
+      if (!result.success) {
+        throw new Error(result.error || 'Unknown API error');
       }
       
-      const response = await apiFunction() as ApiResponse;
-      
-      if (response.success) {
-        setData(response.data);
-        if (options.onSuccess) {
-          options.onSuccess(response.data);
-        }
-      } else {
-        // Ensure we handle the case where error might not be defined
-        const errorMessage = response.error || 'Failed to fetch data';
-        throw new Error(errorMessage);
-      }
+      setData(result.data);
+      options.onSuccess?.(result.data);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('An unknown error occurred');
       setError(error);

@@ -11,7 +11,7 @@ const Footer = () => {
           <div className="md:col-span-2">
             <Link to="/" className="inline-block mb-4">
               <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600">
-                SupplyLink
+                E-living Lab
               </span>
             </Link>
             <p className="text-supply-600 mb-4 max-w-md">
@@ -70,7 +70,7 @@ const Footer = () => {
         
         <div className="mt-8 pt-8 border-t border-supply-100 flex flex-col md:flex-row justify-between items-center">
           <p className="text-supply-500 text-sm">
-            &copy; {new Date().getFullYear()} SupplyLink. All rights reserved.
+            &copy; {new Date().getFullYear()} E-living Lab. All rights reserved.
           </p>
           <div className="flex space-x-6 mt-4 md:mt-0">
             <a href="#" className="text-sm text-supply-500 hover:text-primary transition-colors">
