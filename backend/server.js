@@ -25,7 +25,7 @@ if (process.env.NODE_ENV === 'development') {
 
 // Routes
 app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api', faostatRoutes);
+app.use('/api/faostat', faostatRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
