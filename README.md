@@ -1,69 +1,133 @@
-# Welcome to your Lovable project
+# SupplyLink Analytics Hub
 
-## Project info
+A comprehensive analytics platform for supply chain and agricultural data analysis.
 
-**URL**: https://lovable.dev/projects/f8e02021-b4b4-4d67-a647-67a15da82ce6
+## 🚀 Quick Start
 
-## How can I edit this code?
+### Option 1: Using the startup script (Recommended)
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/f8e02021-b4b4-4d67-a647-67a15da82ce6) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+**Windows:**
+```bash
+start-dev.bat
 ```
 
-**Edit a file directly in GitHub**
+**Linux/Mac:**
+```bash
+chmod +x start-dev.sh
+./start-dev.sh
+```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Option 2: Manual startup
 
-**Use GitHub Codespaces**
+1. **Start Backend Server:**
+   ```bash
+   cd backend
+   npm install
+   npm run dev
+   ```
+   Backend will run on: http://localhost:5001
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+2. **Start Frontend Server:**
+   ```bash
+   npm install
+   npm run dev
+   ```
+   Frontend will run on: http://localhost:8080
 
-## What technologies are used for this project?
+## 📊 Server Information
 
-This project is built with .
+- **Backend API**: http://localhost:5001
+- **Frontend App**: http://localhost:8080
+- **Health Check**: http://localhost:5001/api/health
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 🔧 Configuration
 
-## How can I deploy this project?
+### Backend Environment Variables
 
-Simply open [Lovable](https://lovable.dev/projects/f8e02021-b4b4-4d67-a647-67a15da82ce6) and click on Share -> Publish.
+Create a `.env` file in the `backend` directory with:
 
-## I want to use a custom domain - is that possible?
+```env
+NODE_ENV=development
+PORT=5001
+MONGO_URI=mongodb://localhost:27017/supplylink
+JWT_SECRET=your_jwt_secret_key_here_change_in_production
+FRONTEND_URL=http://localhost:8080
+```
 
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+### Frontend Configuration
+
+The frontend is configured to proxy API calls to the backend automatically via Vite's proxy configuration.
+
+## 🛠️ Development
+
+### Backend Features
+- Express.js server with CORS enabled
+- MongoDB integration (optional for development)
+- JWT authentication
+- FAO STAT data integration
+- User management system
+
+### Frontend Features
+- React with TypeScript
+- Vite for fast development
+- Tailwind CSS for styling
+- Shadcn/ui components
+- Redux Toolkit for state management
+- React Query for data fetching
+
+## 📁 Project Structure
+
+```
+supplylink/
+├── backend/                 # Backend server
+│   ├── config/             # Database and app configuration
+│   ├── controllers/        # Route controllers
+│   ├── middleware/         # Express middleware
+│   ├── models/            # MongoDB models
+│   ├── routes/            # API routes
+│   ├── scripts/           # Data scraping scripts
+│   └── server.js          # Main server file
+├── src/                   # Frontend source code
+├── public/               # Static assets
+├── start-dev.sh          # Linux/Mac startup script
+├── start-dev.bat         # Windows startup script
+└── package.json          # Frontend dependencies
+```
+
+## 🔍 Troubleshooting
+
+### Port Already in Use
+If you get a "port already in use" error:
+1. Check what's running on the port: `netstat -an | findstr :5001` (Windows) or `lsof -i :5001` (Mac/Linux)
+2. Stop the process using that port
+3. Restart the servers
+
+### Database Connection Issues
+The backend will start without a database connection in development mode. To use database features:
+1. Install MongoDB locally or use MongoDB Atlas
+2. Set the `MONGO_URI` environment variable
+3. Restart the backend server
+
+### Frontend Not Loading
+1. Check if the backend is running on port 5001
+2. Verify the proxy configuration in `vite.config.ts`
+3. Check browser console for errors
+
+## 📝 API Endpoints
+
+- `GET /api/health` - Health check
+- `POST /api/users/register` - User registration
+- `POST /api/users/login` - User login
+- `GET /api/faostat/*` - FAO STAT data endpoints
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test both frontend and backend
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
