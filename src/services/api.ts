@@ -8,6 +8,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000, // 10 second timeout
 });
 
 // Request interceptor to add auth token
@@ -30,11 +31,63 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      localStorage.removeItem('refreshToken');
+      // Use window.location.replace to avoid adding to history
+      window.location.replace('/login');
     }
     return Promise.reject(error);
   }
 );
+
+// Authentication API
+export const authAPI = {
+  // Login user
+  login: (credentials: { email: string; password: string }) =>
+    api.post('/users/signin', credentials),
+
+  // Register user
+  register: (userData: { name: string; email: string; password: string; role: string }) =>
+    api.post('/users/signup', userData),
+
+  // Get user profile
+  getProfile: () =>
+    api.get('/users/profile'),
+
+  // Update user profile
+  updateProfile: (userData: any) =>
+    api.put('/users/profile', userData),
+
+  // Refresh token
+  refreshToken: (refreshToken: string) =>
+    api.post('/users/refresh', { refreshToken }),
+
+  // Verify token
+  verifyToken: () =>
+    api.get('/users/verify'),
+};
+
+// Admin API
+export const adminAPI = {
+  // Get admin stats
+  getStats: () =>
+    api.get('/admin/stats'),
+
+  // Get all users
+  getUsers: (params = {}) =>
+    api.get('/admin/users', { params }),
+
+  // Get user by ID
+  getUser: (id: string) =>
+    api.get(`/admin/users/${id}`),
+
+  // Update user
+  updateUser: (id: string, userData: any) =>
+    api.put(`/admin/users/${id}`, userData),
+
+  // Delete user
+  deleteUser: (id: string) =>
+    api.delete(`/admin/users/${id}`),
+};
 
 // Agricultural Data API
 export const agriculturalAPI = {
@@ -63,6 +116,8 @@ export const agriculturalAPI = {
 export const healthCheck = () => api.get('/health');
 
 export default api;
+
+
 
 
 

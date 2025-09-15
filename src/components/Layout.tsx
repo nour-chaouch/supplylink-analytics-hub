@@ -12,7 +12,10 @@ import {
   Wheat, 
   LogOut,
   Home,
-  BarChart
+  BarChart,
+  Shield,
+  Users,
+  TestTube
 } from 'lucide-react'
 
 const Layout = () => {
@@ -30,6 +33,13 @@ const Layout = () => {
     { name: 'Search Data', href: '/search', icon: Search },
     { name: 'Producer Prices', href: '/producer-prices', icon: DollarSign },
     { name: 'Crops & Livestock', href: '/crops-livestock', icon: Wheat },
+    { name: 'API Test', href: '/api-test', icon: TestTube },
+  ]
+
+  const adminNavigation = [
+    { name: 'Admin Panel', href: '/admin-panel', icon: Shield },
+    { name: 'Admin Dashboard', href: '/admin', icon: BarChart3 },
+    { name: 'Manage Users', href: '/admin/users', icon: Users },
   ]
 
   return (
@@ -62,6 +72,31 @@ const Layout = () => {
                     </Link>
                   )
                 })}
+                
+                {/* Admin Navigation - Only show for admin users */}
+                {user?.role === 'admin' && (
+                  <>
+                    <div className="h-6 w-px bg-gray-300 mx-2"></div>
+                    {adminNavigation.map((item) => {
+                      const Icon = item.icon
+                      const isActive = location.pathname === item.href
+                      return (
+                        <Link
+                          key={item.name}
+                          to={item.href}
+                          className={`px-3 py-2 rounded-md text-sm font-medium flex items-center space-x-1 transition-colors ${
+                            isActive
+                              ? 'bg-red-100 text-red-700'
+                              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          <span>{item.name}</span>
+                        </Link>
+                      )
+                    })}
+                  </>
+                )}
               </div>
             </div>
             

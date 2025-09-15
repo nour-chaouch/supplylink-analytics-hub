@@ -31,6 +31,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/faostat', faostatRoutes);
 app.use('/api/agricultural', require('./routes/agriculturalDataRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
