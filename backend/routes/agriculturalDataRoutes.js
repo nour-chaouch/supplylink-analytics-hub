@@ -1,37 +1,28 @@
 const express = require('express');
 const router = express.Router();
-const ProducerPrice = require('../models/ProducerPrice');
-const CropsLivestock = require('../models/CropsLivestock');
+const ProducerPriceService = require('../services/ProducerPriceService');
+const CropsLivestockService = require('../services/CropsLivestockService');
+
+const producerPriceService = new ProducerPriceService();
+const cropsLivestockService = new CropsLivestockService();
 
 // Get all producer prices with optional filters
 router.get('/producer-prices', async (req, res) => {
   try {
     const { area, item, year, domainCode, limit = 50, page = 1 } = req.query;
     
-    const filter = {};
-    if (area) filter.area = new RegExp(area, 'i');
-    if (item) filter.item = new RegExp(item, 'i');
-    if (year) filter.year = parseInt(year);
-    if (domainCode) filter.domainCode = domainCode;
+    const filters = {};
+    if (area) filters.area = area;
+    if (item) filters.item = item;
+    if (year) filters.year = year;
+    if (domainCode) filters.domainCode = domainCode;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    const data = await ProducerPrice.find(filter)
-      .sort({ year: -1, scrapedAt: -1 })
-      .limit(parseInt(limit))
-      .skip(skip);
-
-    const total = await ProducerPrice.countDocuments(filter);
+    const result = await producerPriceService.getProducerPrices(filters, parseInt(page), parseInt(limit));
 
     res.json({
       success: true,
-      data,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
+      data: result.data,
+      pagination: result.pagination
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -41,32 +32,21 @@ router.get('/producer-prices', async (req, res) => {
 // Get all crops and livestock data with optional filters
 router.get('/crops-livestock', async (req, res) => {
   try {
-    const { area, item, year, domainCode, limit = 50, page = 1 } = req.query;
+    const { area, item, year, domainCode, element, limit = 50, page = 1 } = req.query;
     
-    const filter = {};
-    if (area) filter.area = new RegExp(area, 'i');
-    if (item) filter.item = new RegExp(item, 'i');
-    if (year) filter.year = parseInt(year);
-    if (domainCode) filter.domainCode = domainCode;
+    const filters = {};
+    if (area) filters.area = area;
+    if (item) filters.item = item;
+    if (year) filters.year = year;
+    if (domainCode) filters.domainCode = domainCode;
+    if (element) filters.element = element;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    const data = await CropsLivestock.find(filter)
-      .sort({ year: -1, scrapedAt: -1 })
-      .limit(parseInt(limit))
-      .skip(skip);
-
-    const total = await CropsLivestock.countDocuments(filter);
+    const result = await cropsLivestockService.getCropsLivestock(filters, parseInt(page), parseInt(limit));
 
     res.json({
       success: true,
-      data,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
+      data: result.data,
+      pagination: result.pagination
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -78,30 +58,15 @@ router.get('/search', async (req, res) => {
   try {
     const { query, domainCode, area, year, limit = 50, page = 1 } = req.query;
     
-    const filter = {};
-    if (query) {
-      filter.$or = [
-        { item: new RegExp(query, 'i') },
-        { area: new RegExp(query, 'i') },
-        { element: new RegExp(query, 'i') }
-      ];
-    }
-    if (domainCode) filter.domainCode = domainCode;
-    if (area) filter.area = new RegExp(area, 'i');
-    if (year) filter.year = parseInt(year);
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const filters = {};
+    if (domainCode) filters.domainCode = domainCode;
+    if (area) filters.area = area;
+    if (year) filters.year = year;
 
     // Search in both collections
     const [producerPrices, cropsLivestock] = await Promise.all([
-      ProducerPrice.find(filter)
-        .sort({ year: -1, scrapedAt: -1 })
-        .limit(parseInt(limit))
-        .skip(skip),
-      CropsLivestock.find(filter)
-        .sort({ year: -1, scrapedAt: -1 })
-        .limit(parseInt(limit))
-        .skip(skip)
+      producerPriceService.searchProducerPrices(query, filters),
+      cropsLivestockService.searchCropsLivestock(query, filters)
     ]);
 
     // Combine and sort results
@@ -109,19 +74,14 @@ router.get('/search', async (req, res) => {
       .sort((a, b) => new Date(b.scrapedAt) - new Date(a.scrapedAt))
       .slice(0, parseInt(limit));
 
-    const total = await Promise.all([
-      ProducerPrice.countDocuments(filter),
-      CropsLivestock.countDocuments(filter)
-    ]);
-
     res.json({
       success: true,
       data: combinedData,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: total[0] + total[1],
-        pages: Math.ceil((total[0] + total[1]) / parseInt(limit))
+        total: combinedData.length,
+        pages: Math.ceil(combinedData.length / parseInt(limit))
       }
     });
   } catch (error) {
@@ -134,66 +94,22 @@ router.get('/analytics', async (req, res) => {
   try {
     const { domainCode, area, year } = req.query;
     
-    const filter = {};
-    if (domainCode) filter.domainCode = domainCode;
-    if (area) filter.area = new RegExp(area, 'i');
-    if (year) filter.year = parseInt(year);
+    const filters = {};
+    if (domainCode) filters.domainCode = domainCode;
+    if (area) filters.area = area;
+    if (year) filters.year = year;
 
-    // Get aggregated data
+    // Get aggregated data from both services
     const [producerPricesStats, cropsLivestockStats] = await Promise.all([
-      ProducerPrice.aggregate([
-        { $match: filter },
-        {
-          $group: {
-            _id: null,
-            totalRecords: { $sum: 1 },
-            avgValue: { $avg: '$value' },
-            minValue: { $min: '$value' },
-            maxValue: { $max: '$value' },
-            uniqueAreas: { $addToSet: '$area' },
-            uniqueItems: { $addToSet: '$item' },
-            yearRange: { $addToSet: '$year' }
-          }
-        }
-      ]),
-      CropsLivestock.aggregate([
-        { $match: filter },
-        {
-          $group: {
-            _id: null,
-            totalRecords: { $sum: 1 },
-            avgValue: { $avg: '$value' },
-            minValue: { $min: '$value' },
-            maxValue: { $max: '$value' },
-            uniqueAreas: { $addToSet: '$area' },
-            uniqueItems: { $addToSet: '$item' },
-            yearRange: { $addToSet: '$year' }
-          }
-        }
-      ])
+      producerPriceService.getAnalytics(filters),
+      cropsLivestockService.getAnalytics(filters)
     ]);
 
     res.json({
       success: true,
       data: {
-        producerPrices: producerPricesStats[0] || {
-          totalRecords: 0,
-          avgValue: 0,
-          minValue: 0,
-          maxValue: 0,
-          uniqueAreas: [],
-          uniqueItems: [],
-          yearRange: []
-        },
-        cropsLivestock: cropsLivestockStats[0] || {
-          totalRecords: 0,
-          avgValue: 0,
-          minValue: 0,
-          maxValue: 0,
-          uniqueAreas: [],
-          uniqueItems: [],
-          yearRange: []
-        }
+        producerPrices: producerPricesStats,
+        cropsLivestock: cropsLivestockStats
       }
     });
   } catch (error) {
@@ -201,28 +117,20 @@ router.get('/analytics', async (req, res) => {
   }
 });
 
-// Get unique values for filters
+// Get filter options
 router.get('/filters', async (req, res) => {
   try {
-    const [areas, items, years, domainCodes] = await Promise.all([
-      ProducerPrice.distinct('area'),
-      ProducerPrice.distinct('item'),
-      ProducerPrice.distinct('year'),
-      ProducerPrice.distinct('domainCode')
+    const [producerFilters, cropsFilters] = await Promise.all([
+      producerPriceService.getFilterOptions(),
+      cropsLivestockService.getFilterOptions()
     ]);
 
-    const [cropsAreas, cropsItems, cropsYears, cropsDomainCodes] = await Promise.all([
-      CropsLivestock.distinct('area'),
-      CropsLivestock.distinct('item'),
-      CropsLivestock.distinct('year'),
-      CropsLivestock.distinct('domainCode')
-    ]);
-
-    // Combine and deduplicate
-    const allAreas = [...new Set([...areas, ...cropsAreas])].sort();
-    const allItems = [...new Set([...items, ...cropsItems])].sort();
-    const allYears = [...new Set([...years, ...cropsYears])].sort((a, b) => b - a);
-    const allDomainCodes = [...new Set([...domainCodes, ...cropsDomainCodes])].sort();
+    // Combine and deduplicate filter options
+    const allAreas = [...new Set([...producerFilters.areas, ...cropsFilters.areas])].sort();
+    const allItems = [...new Set([...producerFilters.items, ...cropsFilters.items])].sort();
+    const allYears = [...new Set([...producerFilters.years, ...cropsFilters.years])].sort((a, b) => b - a);
+    const allDomainCodes = [...new Set([...producerFilters.domainCodes, ...cropsFilters.domainCodes])].sort();
+    const allElements = [...new Set([...cropsFilters.elements])].sort();
 
     res.json({
       success: true,
@@ -230,7 +138,8 @@ router.get('/filters', async (req, res) => {
         areas: allAreas,
         items: allItems,
         years: allYears,
-        domainCodes: allDomainCodes
+        domainCodes: allDomainCodes,
+        elements: allElements
       }
     });
   } catch (error) {

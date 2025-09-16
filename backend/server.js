@@ -3,6 +3,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
+const { initializeElasticsearch } = require('./config/elasticsearch');
 const faostatRoutes = require('./routes/faostatRoutes');
 
 // Load env vars
@@ -13,7 +14,7 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:8080',
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
 
@@ -32,6 +33,7 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/faostat', faostatRoutes);
 app.use('/api/agricultural', require('./routes/agriculturalDataRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/admin/elasticsearch', require('./routes/elasticsearchAdminRoutes'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -48,12 +50,15 @@ const PORT = process.env.PORT || 5001;
 // Start server without requiring database connection for development
 const startServer = async () => {
   try {
-    // Try to connect to database but don't fail if it's not available
+    // Try to connect to MongoDB but don't fail if it's not available
     if (process.env.MONGO_URI) {
       await connectDB();
     } else {
-      console.log('⚠️  No MONGO_URI provided, running without database connection');
+      console.log('⚠️  No MONGO_URI provided, running without MongoDB connection');
     }
+    
+    // Initialize Elasticsearch
+    await initializeElasticsearch();
     
     app.listen(PORT, () => {
       console.log(`🚀 SupplyLink Backend running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
