@@ -220,4 +220,3 @@ simulateLogin();
 - **Remember Me**: Add "Remember Me" option for longer sessions
 - **Session Management**: Add session timeout warnings
 - **Multi-tab Sync**: Sync auth state across browser tabs
-

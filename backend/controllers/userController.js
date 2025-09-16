@@ -48,11 +48,11 @@ const registerUser = async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ['farmer', 'retailer', 'transporter', 'manager', 'regulator', 'admin'];
+    const validRoles = ['admin', 'user'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ 
         success: false,
-        message: `Invalid role. Must be one of: ${validRoles.join(', ')}` 
+        message: 'Invalid role. Must be either "admin" or "user"' 
       });
     }
 
@@ -227,15 +227,6 @@ const updateUserProfile = async (req, res) => {
     user.company = req.body.company || user.company;
     user.bio = req.body.bio || user.bio;
 
-    // Update role-specific fields
-    if (user.role.toLowerCase() === 'farmer') {
-      user.farmSize = req.body.farmSize || user.farmSize;
-      user.mainCrops = req.body.mainCrops || user.mainCrops;
-    } else if (user.role.toLowerCase() === 'retailer') {
-      user.storeLocation = req.body.storeLocation || user.storeLocation;
-      user.businessType = req.body.businessType || user.businessType;
-    }
-
     const updatedUser = await user.save();
 
     res.json({
@@ -322,6 +313,84 @@ const verifyToken = async (req, res) => {
   }
 };
 
+// @desc    Admin create user
+// @route   POST /api/admin/users
+// @access  Private (Admin only)
+const adminCreateUser = async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Please provide all required fields: name, email, password, role' 
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Please provide a valid email address' 
+      });
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Password must be at least 6 characters long' 
+      });
+    }
+
+    // Validate role
+    if (!['admin', 'user'].includes(role)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Role must be either "admin" or "user"' 
+      });
+    }
+
+    // Check if user already exists
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'User already exists with this email' 
+      });
+    }
+
+    // Create user
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      data: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin create user error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while creating user' 
+    });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -329,4 +398,5 @@ module.exports = {
   updateUserProfile,
   refreshToken,
   verifyToken,
+  adminCreateUser,
 };

@@ -63,4 +63,3 @@ window.simulateLogin = function() {
 console.log('💡 Available helper functions:');
 console.log('  - clearAuthData(): Clear all auth data');
 console.log('  - simulateLogin(): Save mock login data');
-

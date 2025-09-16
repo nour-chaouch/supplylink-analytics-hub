@@ -194,4 +194,3 @@ module.exports = {
   deleteIndex,
   getIndexStats
 };
-

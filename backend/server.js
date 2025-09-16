@@ -32,8 +32,24 @@ app.get('/api/health', (req, res) => {
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/faostat', faostatRoutes);
 app.use('/api/agricultural', require('./routes/agriculturalDataRoutes'));
+
+// Debug middleware for admin routes
+app.use('/api/admin', (req, res, next) => {
+  console.log(`Admin route accessed: ${req.method} ${req.path}`);
+  next();
+});
+
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/admin/elasticsearch', require('./routes/elasticsearchAdminRoutes'));
+
+// Catch-all route for debugging
+app.use('*', (req, res) => {
+  console.log(`Unmatched route: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ 
+    success: false, 
+    message: `Route not found: ${req.method} ${req.originalUrl}` 
+  });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

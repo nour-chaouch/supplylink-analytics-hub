@@ -208,4 +208,3 @@ const CropsLivestock: React.FC = () => {
 };
 
 export default CropsLivestock;
-

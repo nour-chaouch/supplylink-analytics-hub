@@ -110,4 +110,3 @@ class UserService extends ElasticsearchService {
 }
 
 module.exports = UserService;
-

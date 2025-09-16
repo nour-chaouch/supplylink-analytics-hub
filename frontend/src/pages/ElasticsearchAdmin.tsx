@@ -451,4 +451,3 @@ const ElasticsearchAdmin = () => {
 };
 
 export default ElasticsearchAdmin;
-

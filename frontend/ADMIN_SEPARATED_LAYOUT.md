@@ -141,4 +141,3 @@ Successfully separated the admin dashboard into its own dedicated layout with a 
 - **Role Management**: Advanced permission system
 
 The admin dashboard now has its own dedicated, professional interface that provides a clear separation from the guest experience while maintaining all the powerful admin functionality!
-

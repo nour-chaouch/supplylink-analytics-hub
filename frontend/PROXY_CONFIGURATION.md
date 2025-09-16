@@ -33,7 +33,8 @@ module.exports = function(app) {
     createProxyMiddleware({
       target: 'http://localhost:5001',
       changeOrigin: true,
-      secure: false
+      secure: false,
+      logLevel: 'debug'
     })
   );
 };
@@ -73,7 +74,9 @@ Backend (localhost:5001) → http://localhost:5001/api/admin/elasticsearch/healt
    - But actually proxies to: `http://localhost:5001/api/admin/elasticsearch/health`
 
 ### **Check Console Logs**
-The setupProxy.js provides clean proxy configuration without debug logging for production use.
+The setupProxy.js includes debug logging:
+- `Proxying request: GET /api/admin/elasticsearch/health`
+- Any proxy errors will be logged
 
 ## Dependencies Added
 

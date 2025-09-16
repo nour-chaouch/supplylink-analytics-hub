@@ -183,4 +183,3 @@ const ProducerPrices: React.FC = () => {
 };
 
 export default ProducerPrices;
-

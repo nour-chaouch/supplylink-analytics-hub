@@ -1,11 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const { protect, adminOnly } = require('../middleware/authMiddleware');
 const { getElasticsearchClient } = require('../config/elasticsearch');
 const { createIndex, deleteIndex, getIndexStats } = require('../config/elasticsearchMappings');
 const UserService = require('../services/UserService');
 const ProducerPriceService = require('../services/ProducerPriceService');
 const CropsLivestockService = require('../services/CropsLivestockService');
+
+// Apply protect and adminOnly middleware to all routes
+router.use(protect);
+router.use(adminOnly);
 
 // Configure multer for file uploads
 const upload = multer({ 

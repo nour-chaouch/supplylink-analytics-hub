@@ -55,11 +55,11 @@ const updateUserRole = async (req, res) => {
     const { role } = req.body;
     
     // Validate role
-    const validRoles = ['farmer', 'retailer', 'transporter', 'manager', 'regulator', 'admin'];
+    const validRoles = ['admin', 'user'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid role. Must be one of: ' + validRoles.join(', ')
+        message: 'Invalid role. Must be either "admin" or "user"'
       });
     }
 
@@ -193,11 +193,11 @@ const createUser = async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ['farmer', 'retailer', 'transporter', 'manager', 'regulator', 'admin'];
+    const validRoles = ['admin', 'user'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid role. Must be one of: ' + validRoles.join(', ')
+        message: 'Invalid role. Must be either "admin" or "user"'
       });
     }
 
@@ -235,10 +235,100 @@ const createUser = async (req, res) => {
   }
 };
 
+// @desc    Update user (Admin only)
+// @route   PUT /api/admin/users/:id
+// @access  Private/Admin
+const updateUser = async (req, res) => {
+  try {
+    const { name, email, role } = req.body;
+    const userId = req.params.id;
+
+    // Validate required fields
+    if (!name || !email || !role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields: name, email, role'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address'
+      });
+    }
+
+    // Validate role
+    const validRoles = ['admin', 'user'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role. Must be either "admin" or "user"'
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if email is being changed and if it already exists
+    if (email !== user.email) {
+      const emailExists = await User.findOne({ email });
+      if (emailExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email already exists'
+        });
+      }
+    }
+
+    // Prevent admin from changing their own role
+    if (user._id.toString() === req.user._id.toString() && role !== user.role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot change your own role'
+      });
+    }
+
+    // Update user
+    user.name = name;
+    user.email = email;
+    user.role = role;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      data: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
   updateUserRole,
+  updateUser,
   deleteUser,
   getSystemStats,
   createUser

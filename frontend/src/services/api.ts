@@ -90,6 +90,10 @@ export const adminAPI = {
   deleteUser: (id: string) =>
     api.delete(`/admin/users/${id}`),
 
+  // Create user
+  createUser: (userData: any) =>
+    api.post('/admin/users', userData),
+
   // Elasticsearch Admin API
   getElasticsearchHealth: () =>
     api.get('/admin/elasticsearch/health'),
