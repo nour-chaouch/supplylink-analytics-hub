@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../services/api';
+import DataImportWizard from '../components/DataImportWizard';
+import IndexCreationForm from '../components/IndexCreationForm';
 import { 
   Database, 
   Plus, 
@@ -10,8 +12,12 @@ import {
   CheckCircle,
   Loader2,
   FileText,
-  Settings
+  Settings,
+  Wand2,
+  Eye,
+  Edit
 } from 'lucide-react';
+import DataManagement from '../components/DataManagement';
 
 interface IndexInfo {
   index: string;
@@ -19,6 +25,25 @@ interface IndexInfo {
   status: string;
   docs_count: string;
   store_size: string;
+  pri?: string;
+  rep?: string;
+  uuid?: string;
+  // Elasticsearch cat.indices fields with dots
+  'docs.count'?: string;
+  'docs.deleted'?: string;
+  'store.size'?: string;
+  'pri.store.size'?: string;
+  'dataset.size'?: string;
+  // New enriched fields from backend (when working)
+  docsCount?: number;
+  docsDeleted?: number;
+  storeSize?: number;
+  storeSizeHuman?: string;
+  numberOfShards?: number;
+  numberOfReplicas?: string;
+  creationDate?: string | null;
+  mappingFields?: number;
+  error?: string;
 }
 
 interface ClusterHealth {
@@ -36,13 +61,15 @@ const ElasticsearchAdmin = () => {
   const [success, setSuccess] = useState<string | null>(null);
   
   // Index creation state
-  const [newIndexName, setNewIndexName] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [customMapping, setCustomMapping] = useState('');
+  const [showIndexCreationForm, setShowIndexCreationForm] = useState(false);
   
-  // File upload state
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  // Wizard state
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [selectedIndexForWizard, setSelectedIndexForWizard] = useState<string>('');
+  
+  // Data management state
+  const [dataManagementOpen, setDataManagementOpen] = useState(false);
+  const [selectedIndexForDataManagement, setSelectedIndexForDataManagement] = useState<string>('');
 
   // Load cluster health and indices
   const loadElasticsearchData = async () => {
@@ -67,53 +94,10 @@ const ElasticsearchAdmin = () => {
     }
   };
 
-  // Create new index
-  const createIndex = async () => {
-    if (!newIndexName.trim()) {
-      setError('Index name is required');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      let mapping = {};
-      
-      if (selectedTemplate && selectedTemplate !== 'custom') {
-        // Get template mapping
-        const templatesResponse = await fetch('/api/admin/elasticsearch/templates');
-        const templatesData = await templatesResponse.json();
-        if (templatesData.success) {
-          mapping = templatesData.data[selectedTemplate];
-        }
-      } else if (selectedTemplate === 'custom' && customMapping.trim()) {
-        try {
-          mapping = JSON.parse(customMapping);
-        } catch (parseError) {
-          setError('Invalid JSON mapping');
-          setLoading(false);
-          return;
-        }
-      }
-
-      const response = await adminAPI.createElasticsearchIndex(newIndexName, Object.keys(mapping).length > 0 ? mapping : undefined);
-      const data = response.data;
-      
-      if (data.success) {
-        setSuccess(data.message);
-        setNewIndexName('');
-        setSelectedTemplate('');
-        setCustomMapping('');
-        loadElasticsearchData();
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      setError('Failed to create index');
-    } finally {
-      setLoading(false);
-    }
+  // Handle successful index creation
+  const handleIndexCreationSuccess = () => {
+    setSuccess('Index created successfully!');
+    loadElasticsearchData();
   };
 
   // Delete index
@@ -142,64 +126,34 @@ const ElasticsearchAdmin = () => {
     }
   };
 
-  // Create predefined indices
-  const createPredefinedIndices = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await adminAPI.createPredefinedIndices();
-      const data = response.data;
-      
-      if (data.success) {
-        setSuccess(data.message);
-        loadElasticsearchData();
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      setError('Failed to create predefined indices');
-    } finally {
-      setLoading(false);
-    }
+
+  // Open import wizard for specific index
+  const openImportWizard = (indexName: string) => {
+    setSelectedIndexForWizard(indexName);
+    setWizardOpen(true);
   };
 
-  // Handle file upload
-  const handleFileUpload = async (indexName: string) => {
-    if (!selectedFile) {
-      setError('Please select a file');
-      return;
-    }
-
-    setUploading(true);
-    setError(null);
-    
-    try {
-      const response = await adminAPI.importElasticsearchData(indexName, selectedFile);
-      const data = response.data;
-      
-      if (data.success) {
-        setSuccess(data.message);
-        setSelectedFile(null);
-        loadElasticsearchData();
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      setError('Failed to upload file');
-    } finally {
-      setUploading(false);
-    }
+  // Handle wizard success
+  const handleWizardSuccess = () => {
+    setSuccess('Data imported successfully!');
+    loadElasticsearchData();
   };
 
-  // Handle file selection
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && file.type === 'application/json') {
-      setSelectedFile(file);
-    } else {
-      setError('Please select a valid JSON file');
-    }
+  // Close wizard
+  const closeWizard = () => {
+    setWizardOpen(false);
+    setSelectedIndexForWizard('');
+  };
+
+  // Data management functions
+  const openDataManagement = (indexName: string) => {
+    setSelectedIndexForDataManagement(indexName);
+    setDataManagementOpen(true);
+  };
+
+  const closeDataManagement = () => {
+    setDataManagementOpen(false);
+    setSelectedIndexForDataManagement('');
   };
 
   useEffect(() => {
@@ -286,88 +240,51 @@ const ElasticsearchAdmin = () => {
 
       {/* Create Index */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center space-x-2 mb-4">
-          <Plus className="h-5 w-5" />
-          <h2 className="text-xl font-semibold">Create New Index</h2>
-        </div>
-        <p className="text-gray-600 mb-4">Create a new Elasticsearch index with optional mapping</p>
-        
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="indexName" className="block text-sm font-medium text-gray-700 mb-1">
-                Index Name
-              </label>
-              <input
-                id="indexName"
-                type="text"
-                value={newIndexName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewIndexName(e.target.value)}
-                placeholder="Enter index name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label htmlFor="template" className="block text-sm font-medium text-gray-700 mb-1">
-                Template
-              </label>
-              <select
-                id="template"
-                value={selectedTemplate}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTemplate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select a template</option>
-                <option value="users">Users</option>
-                <option value="producer_prices">Producer Prices</option>
-                <option value="crops_livestock">Crops & Livestock</option>
-                <option value="custom">Custom Mapping</option>
-                <option value="empty">Empty Index</option>
-              </select>
-            </div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <Plus className="h-5 w-5" />
+            <h2 className="text-xl font-semibold">Create Custom Index</h2>
           </div>
-          
-          {selectedTemplate === 'custom' && (
-            <div>
-              <label htmlFor="customMapping" className="block text-sm font-medium text-gray-700 mb-1">
-                Custom Mapping (JSON)
-              </label>
-              <textarea
-                id="customMapping"
-                value={customMapping}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCustomMapping(e.target.value)}
-                className="w-full h-32 p-3 border border-gray-300 rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter JSON mapping..."
-              />
+          <button
+            onClick={() => setShowIndexCreationForm(true)}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create New Index
+          </button>
+        </div>
+        <p className="text-gray-600">
+          Create a custom Elasticsearch index with your own field definitions and data types.
+          Define exactly what fields you need and their types for optimal data storage and querying.
+        </p>
+        
+        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+          <div className="flex items-start">
+            <AlertCircle className="h-5 w-5 text-blue-500 mr-2 mt-0.5" />
+            <div className="text-sm text-blue-800">
+              <p className="font-medium mb-1">Custom Index Creation Features:</p>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                <li>Define custom field names and data types</li>
+                <li>Support for all Elasticsearch field types (text, keyword, integer, date, etc.)</li>
+                <li>Automatic optimization settings (analyzers, mappings)</li>
+                <li>Built-in timestamp fields (createdAt, updatedAt)</li>
+                <li>Field validation and naming rules</li>
+              </ul>
             </div>
-          )}
-          
-          <div className="flex space-x-2">
-            <button 
-              onClick={createIndex} 
-              disabled={loading || !newIndexName.trim()}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              <span className="ml-2">Create Index</span>
-            </button>
-            <button 
-              onClick={createPredefinedIndices} 
-              disabled={loading} 
-              className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50"
-            >
-              <Settings className="h-4 w-4" />
-              <span className="ml-2">Create Predefined Indices</span>
-            </button>
           </div>
         </div>
       </div>
 
       {/* Indices List */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center space-x-2 mb-4">
-          <FileText className="h-5 w-5" />
-          <h2 className="text-xl font-semibold">Indices ({indices.length})</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <FileText className="h-5 w-5" />
+            <h2 className="text-xl font-semibold">Indices ({indices.length})</h2>
+          </div>
+          <div className="text-sm text-gray-500">
+            Click "Import Data" for step-by-step wizard
+          </div>
         </div>
         
         <div className="space-y-4">
@@ -382,42 +299,75 @@ const ElasticsearchAdmin = () => {
                     </span>
                     <div className={`w-2 h-2 rounded-full ${getHealthColor(index.health)}`}></div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-2">
                     <div>
-                      <span className="font-medium">Documents:</span> {index.docs_count}
+                      <span className="font-medium">Documents:</span> {
+                        index.docsCount?.toLocaleString() || 
+                        index.docs_count || 
+                        (index as any)['docs.count'] || 
+                        '0'
+                      }
                     </div>
                     <div>
-                      <span className="font-medium">Store Size:</span> {index.store_size}
+                      <span className="font-medium">Store Size:</span> {
+                        index.storeSizeHuman || 
+                        index.store_size || 
+                        (index as any)['store.size'] || 
+                        '0 B'
+                      }
+                    </div>
+                    <div>
+                      <span className="font-medium">Shards:</span> {index.pri || '0'}
                     </div>
                     <div>
                       <span className="font-medium">Health:</span> {index.health}
                     </div>
                   </div>
+                  {/* Additional details */}
+                  {(index.mappingFields || index.docsDeleted || index['docs.deleted'] || index.rep) && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-500">
+                      {index.mappingFields && index.mappingFields > 0 && (
+                        <div>
+                          <span className="font-medium">Fields:</span> {index.mappingFields}
+                        </div>
+                      )}
+                      {((index.docsDeleted && index.docsDeleted > 0) || 
+                        (index['docs.deleted'] && parseInt(index['docs.deleted']) > 0)) && (
+                        <div>
+                          <span className="font-medium">Deleted Docs:</span> {
+                            index.docsDeleted?.toLocaleString() || 
+                            index['docs.deleted'] || 
+                            '0'
+                          }
+                        </div>
+                      )}
+                      {(index.numberOfReplicas || index.rep) && (
+                        <div>
+                          <span className="font-medium">Replicas:</span> {index.numberOfReplicas || index.rep}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex space-x-2">
-                  {/* File Upload */}
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={handleFileSelect}
-                      className="hidden"
-                      id={`file-${index.index}`}
-                    />
-                    <label htmlFor={`file-${index.index}`} className="cursor-pointer p-2 hover:bg-gray-100 rounded">
-                      <Upload className="h-4 w-4" />
-                    </label>
-                    {selectedFile && (
-                      <button
-                        onClick={() => handleFileUpload(index.index)}
-                        disabled={uploading}
-                        className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50"
-                      >
-                        {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Import'}
-                      </button>
-                    )}
-                  </div>
+                  {/* Import Wizard Button */}
+                  <button
+                    onClick={() => openImportWizard(index.index)}
+                    className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  >
+                    <Wand2 className="h-4 w-4 mr-1" />
+                    Import Data
+                  </button>
+                  
+                  {/* Data Management Button */}
+                  <button
+                    onClick={() => openDataManagement(index.index)}
+                    className="flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    Manage Data
+                  </button>
                     
                     <button
                       onClick={() => deleteIndex(index.index)}
@@ -428,12 +378,6 @@ const ElasticsearchAdmin = () => {
                     </button>
                   </div>
                 </div>
-                
-                {selectedFile && (
-                  <div className="mt-2 text-sm text-gray-600">
-                    Selected file: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-                  </div>
-                )}
               </div>
             ))}
             
@@ -446,6 +390,29 @@ const ElasticsearchAdmin = () => {
           )}
         </div>
       </div>
+
+      {/* Data Import Wizard */}
+      <DataImportWizard
+        indexName={selectedIndexForWizard}
+        isOpen={wizardOpen}
+        onClose={closeWizard}
+        onSuccess={handleWizardSuccess}
+      />
+
+      {/* Data Management */}
+      {dataManagementOpen && (
+        <DataManagement
+          indexName={selectedIndexForDataManagement}
+          onClose={closeDataManagement}
+        />
+      )}
+
+      {/* Index Creation Form */}
+      <IndexCreationForm
+        isOpen={showIndexCreationForm}
+        onClose={() => setShowIndexCreationForm(false)}
+        onSuccess={handleIndexCreationSuccess}
+      />
     </div>
   );
 };

@@ -113,18 +113,100 @@ export const adminAPI = {
   importElasticsearchData: (indexName: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post(`/admin/elasticsearch/data/import/${indexName}`, formData, {
+    return api.post(`/admin/elasticsearch/indices/${indexName}/import`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
   },
 
+  importElasticsearchDataWithProgress: async (indexName: string, file: File, bulkSize?: number) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (bulkSize) {
+      formData.append('bulkSize', bulkSize.toString());
+    }
+    
+    // Get auth token from localStorage
+    const token = localStorage.getItem('token');
+    console.log('Using token for SSE:', token ? 'Token found' : 'No token');
+    
+    // Use fetch for Server-Sent Events instead of axios
+    const response = await fetch(`/api/admin/elasticsearch/indices/${indexName}/import-with-progress`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include', // Include cookies for authentication
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+    });
+    
+    console.log('SSE Response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('SSE Error response:', errorText);
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+    }
+    
+    return response;
+  },
+
   getElasticsearchMappings: (indexName: string) =>
-    api.get(`/admin/elasticsearch/mappings/${indexName}`),
+    api.get(`/admin/elasticsearch/indices/${indexName}/mapping`),
 
   getElasticsearchStats: (indexName?: string) =>
-    api.get(`/admin/elasticsearch/stats${indexName ? `/${indexName}` : ''}`),
+    api.get(`/admin/elasticsearch/indices/${indexName}/stats`),
+
+  // New methods for the wizard
+  getSupportedFormats: () =>
+    api.get('/admin/elasticsearch/supported-formats'),
+
+  getIndexCompatibility: (indexName: string) =>
+    api.get(`/admin/elasticsearch/indices/${indexName}/schema`),
+
+  // Data Management API
+  getDocuments: (indexName: string, params?: {
+    page?: number;
+    size?: number;
+    search?: string;
+    sortField?: string;
+    sortOrder?: 'asc' | 'desc';
+    fields?: string;
+  }) =>
+    api.get(`/admin/elasticsearch/indices/${indexName}/documents`, { params }),
+
+  getDocument: (indexName: string, documentId: string) =>
+    api.get(`/admin/elasticsearch/indices/${indexName}/documents/${documentId}`),
+
+  createDocument: (indexName: string, document: any, documentId?: string) =>
+    api.post(`/admin/elasticsearch/indices/${indexName}/documents`, {
+      document,
+      documentId
+    }),
+
+  updateDocument: (indexName: string, documentId: string, document: any) =>
+    api.put(`/admin/elasticsearch/indices/${indexName}/documents/${documentId}`, {
+      document
+    }),
+
+  deleteDocument: (indexName: string, documentId: string) =>
+    api.delete(`/admin/elasticsearch/indices/${indexName}/documents/${documentId}`),
+
+  bulkDocumentOperations: (indexName: string, operations: Array<{
+    action: 'index' | 'create' | 'delete';
+    document?: any;
+    documentId: string;
+  }>) =>
+    api.post(`/admin/elasticsearch/indices/${indexName}/documents/bulk`, {
+      operations
+    }),
+
+  getSortFields: (indexName: string) =>
+    api.get(`/admin/elasticsearch/indices/${indexName}/sort-fields`),
+
+  getIndexSchema: (indexName: string) =>
+    api.get(`/admin/elasticsearch/indices/${indexName}/schema`),
 };
 
 // Agricultural Data API
