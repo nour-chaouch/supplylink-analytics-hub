@@ -1254,6 +1254,15 @@ router.get('/indices/:indexName/documents', async (req, res) => {
       fields = '*'
     } = req.query;
 
+    // Extract filters from query parameters
+    const filters = {};
+    Object.keys(req.query).forEach(key => {
+      if (key.startsWith('filter.')) {
+        const fieldName = key.replace('filter.', '');
+        filters[fieldName] = req.query[key];
+      }
+    });
+
     const client = getElasticsearchClient();
     if (!client) {
       return res.status(500).json({ 
@@ -1282,21 +1291,435 @@ router.get('/indices/:indexName/documents', async (req, res) => {
       }
     };
 
-    // Add search if provided
-    if (search.trim()) {
-      query.body.query = {
-        multi_match: {
-          query: search,
-          fields: ['*'],
-          type: 'best_fields',
-          fuzziness: 'AUTO'
+    // Get index mapping to determine field types dynamically
+    let indexFields = {};
+    try {
+      const mappingResponse = await client.indices.getMapping({ index: indexName });
+      const properties = mappingResponse[indexName]?.mappings?.properties || {};
+      indexFields = properties;
+    } catch (mappingError) {
+      console.error('Could not get index mapping:', mappingError.message);
+    }
+
+    // Add comprehensive search if provided
+    const searchTerm = search.trim();
+    
+    // Build filter conditions dynamically based on index fields
+    const filterConditions = [];
+    Object.keys(filters).forEach(fieldName => {
+      const filterValue = filters[fieldName];
+      if (filterValue && filterValue.trim()) {
+        const trimmedValue = filterValue.trim();
+        const fieldType = indexFields[fieldName]?.type;
+        
+        // Build case-insensitive filter matching based on field type
+        const filterQueries = [];
+        
+        if (fieldType === 'keyword') {
+          // For keyword fields, use exact match and wildcards
+          filterQueries.push(
+            { term: { [fieldName]: trimmedValue } },
+            { wildcard: { [fieldName]: `*${trimmedValue.toLowerCase()}*` } },
+            { wildcard: { [fieldName]: `*${trimmedValue.toUpperCase()}*` } },
+            { wildcard: { [fieldName]: `*${trimmedValue.charAt(0).toUpperCase() + trimmedValue.slice(1).toLowerCase()}*` } },
+            { wildcard: { [fieldName]: `*${trimmedValue}*` } }
+          );
+        } else if (fieldType === 'text') {
+          // For text fields, use match queries
+          filterQueries.push(
+            { match: { [fieldName]: trimmedValue } },
+            { match: { [fieldName]: trimmedValue.toLowerCase() } },
+            { match: { [fieldName]: trimmedValue.toUpperCase() } },
+            { match: { [fieldName]: trimmedValue.charAt(0).toUpperCase() + trimmedValue.slice(1).toLowerCase() } }
+          );
+        } else if (fieldType === 'integer' || fieldType === 'long' || fieldType === 'float' || fieldType === 'double') {
+          // For numeric fields, try exact match and range
+          const numValue = parseFloat(trimmedValue);
+          if (!isNaN(numValue)) {
+            filterQueries.push(
+              { term: { [fieldName]: numValue } },
+              { range: { [fieldName]: { gte: numValue, lte: numValue } } }
+            );
+          }
+        } else if (fieldType === 'date') {
+          // For date fields, only try exact match if it looks like a date
+          const dateRegex = /^\d{4}-\d{2}-\d{2}/; // Basic date format check
+          if (dateRegex.test(trimmedValue)) {
+            filterQueries.push(
+              { term: { [fieldName]: trimmedValue } }
+            );
+          }
+        } else {
+          // For unknown field types, only use match queries to avoid parsing errors
+          // Term queries can cause parsing errors on numeric fields with non-numeric values
+          filterQueries.push(
+            { match: { [fieldName]: trimmedValue } }
+          );
+        }
+        
+        filterConditions.push({
+          bool: {
+            should: filterQueries,
+            minimum_should_match: 1
+          }
+        });
+      }
+    });
+
+    if (searchTerm) {
+      // Build search query dynamically based on index fields
+      const searchQueries = [];
+      
+      // Get all searchable fields from the index
+      const fieldNames = Object.keys(indexFields);
+      
+      // Build search queries for each field based on its type
+      fieldNames.forEach(fieldName => {
+        const fieldType = indexFields[fieldName]?.type;
+        
+        if (fieldType === 'keyword') {
+          // For keyword fields, use exact match and wildcards
+          searchQueries.push(
+            { term: { [fieldName]: searchTerm } },
+            { wildcard: { [fieldName]: `*${searchTerm.toLowerCase()}*` } },
+            { wildcard: { [fieldName]: `*${searchTerm.toUpperCase()}*` } },
+            { wildcard: { [fieldName]: `*${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1).toLowerCase()}*` } },
+            { wildcard: { [fieldName]: `*${searchTerm}*` } }
+          );
+        } else if (fieldType === 'text') {
+          // For text fields, use match queries
+          searchQueries.push(
+            { match: { [fieldName]: searchTerm } },
+            { match: { [fieldName]: searchTerm.toLowerCase() } },
+            { match: { [fieldName]: searchTerm.toUpperCase() } },
+            { match: { [fieldName]: searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1).toLowerCase() } }
+          );
+        } else if (fieldType === 'integer' || fieldType === 'long' || fieldType === 'float' || fieldType === 'double') {
+          // For numeric fields, try exact match
+          const numValue = parseFloat(searchTerm);
+          if (!isNaN(numValue)) {
+            searchQueries.push(
+              { term: { [fieldName]: numValue } }
+            );
+          }
+        } else if (fieldType === 'date') {
+          // For date fields, only try exact match if it looks like a date
+          const dateRegex = /^\d{4}-\d{2}-\d{2}/; // Basic date format check
+          if (dateRegex.test(searchTerm)) {
+            searchQueries.push(
+              { term: { [fieldName]: searchTerm } }
+            );
+          }
+        } else {
+          // For unknown field types, only use match queries to avoid parsing errors
+          // Term queries can cause parsing errors on numeric fields with non-numeric values
+          searchQueries.push(
+            { match: { [fieldName]: searchTerm } }
+          );
+        }
+      });
+      
+      // Add multi-match query for all fields (safe for all field types)
+      searchQueries.push(
+        { multi_match: { query: searchTerm, fields: fieldNames, type: 'best_fields', operator: 'or', boost: 1.5 } },
+        { multi_match: { query: searchTerm, fields: fieldNames, type: 'cross_fields', operator: 'or', boost: 1.2 } }
+      );
+      
+      // Add query string for wildcard support (only on keyword and text fields)
+      const wildcardFields = fieldNames.filter(fieldName => {
+        const fieldType = indexFields[fieldName]?.type;
+        return fieldType === 'keyword' || fieldType === 'text';
+      });
+      
+      if (wildcardFields.length > 0) {
+        searchQueries.push(
+          { query_string: { query: `*${searchTerm.toLowerCase()}* OR *${searchTerm.toUpperCase()}* OR *${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1).toLowerCase()}* OR *${searchTerm}*`, fields: wildcardFields, default_operator: 'OR', boost: 1.0 } }
+        );
+      }
+      
+      const searchQuery = {
+        bool: {
+          should: searchQueries,
+          minimum_should_match: 1
         }
       };
+
+      // Combine search and filters
+      if (filterConditions.length > 0) {
+        query.body.query = {
+          bool: {
+            must: [
+              searchQuery,
+              ...filterConditions
+            ]
+          }
+        };
+      } else {
+        query.body.query = searchQuery;
+      }
+    } else if (filterConditions.length > 0) {
+      // Only filters, no search
+      if (filterConditions.length === 1) {
+        query.body.query = filterConditions[0];
+      } else {
+        query.body.query = {
+          bool: {
+            must: filterConditions
+          }
+        };
+      }
     } else {
+      // No search, no filters
       query.body.query = { match_all: {} };
     }
 
-    const response = await client.search(query);
+    // Debug: Log the query structure
+    console.log('Search query structure:', JSON.stringify(query.body.query, null, 2));
+    console.log('Search term:', searchTerm);
+    console.log('Filter conditions count:', filterConditions.length);
+    
+    let response;
+    try {
+      response = await client.search(query);
+    } catch (searchError) {
+      // If search fails due to date parsing or other issues, try a simpler approach
+      console.error('Search error:', searchError.message);
+      
+      // Try a simpler approach that preserves both search and filters
+      if (searchTerm || filterConditions.length > 0) {
+        // Build a simpler query that avoids problematic field types
+        const simpleSearchQueries = [];
+        const fieldNames = Object.keys(indexFields);
+        
+        // Only use keyword and text fields for the fallback search
+        fieldNames.forEach(fieldName => {
+          const fieldType = indexFields[fieldName]?.type;
+          
+          if (fieldType === 'keyword') {
+            simpleSearchQueries.push(
+              { wildcard: { [fieldName]: `*${searchTerm.toLowerCase()}*` } },
+              { wildcard: { [fieldName]: `*${searchTerm.toUpperCase()}*` } },
+              { wildcard: { [fieldName]: `*${searchTerm}*` } }
+            );
+          } else if (fieldType === 'text') {
+            simpleSearchQueries.push(
+              { match: { [fieldName]: searchTerm } }
+            );
+          } else if (fieldType === 'integer' || fieldType === 'long' || fieldType === 'float' || fieldType === 'double') {
+            // For numeric fields, only try exact match if it's a number
+            const numValue = parseFloat(searchTerm);
+            if (!isNaN(numValue)) {
+              simpleSearchQueries.push(
+                { term: { [fieldName]: numValue } }
+              );
+            }
+          }
+          // Skip date and other field types in fallback to avoid errors
+        });
+        
+        let fallbackQuery;
+        if (searchTerm && filterConditions.length > 0) {
+          // Both search and filters
+          fallbackQuery = {
+            bool: {
+              must: [
+                {
+                  bool: {
+                    should: simpleSearchQueries,
+                    minimum_should_match: 1
+                  }
+                },
+                ...filterConditions
+              ]
+            }
+          };
+        } else if (searchTerm) {
+          // Only search
+          fallbackQuery = {
+            bool: {
+              should: simpleSearchQueries,
+              minimum_should_match: 1
+            }
+          };
+        } else {
+          // Only filters
+          fallbackQuery = filterConditions.length === 1 ? filterConditions[0] : {
+            bool: {
+              must: filterConditions
+            }
+          };
+        }
+        
+        const simpleQuery = {
+          index: indexName,
+          body: {
+            from,
+            size: parseInt(size),
+            sort: [{ [sortField]: { order: sortOrder } }],
+            _source: fields === '*' ? true : fields.split(','),
+            query: fallbackQuery
+          }
+        };
+        
+        try {
+          response = await client.search(simpleQuery);
+        } catch (fallbackError) {
+          console.error('Fallback search error:', fallbackError.message);
+          return res.status(400).json({
+            success: false,
+            message: `Search failed: ${searchError.message}`
+          });
+        }
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: `Search failed: ${searchError.message}`
+        });
+      }
+    }
+    
+    // If no results found, try a simpler query as fallback
+    if (response.hits.total.value === 0 && (searchTerm || filterConditions.length > 0)) {
+      console.log('No results found, trying fallback queries...');
+      console.log('Search term:', searchTerm);
+      console.log('Filter conditions:', filterConditions.length);
+      
+      // Try multiple fallback strategies with dynamic field detection
+      const fieldNames = Object.keys(indexFields);
+      const fallbackQueries = [];
+      
+      if (searchTerm) {
+        // Build dynamic fallback queries based on field types
+        const fallbackSearchQueries = [];
+        
+        fieldNames.forEach(fieldName => {
+          const fieldType = indexFields[fieldName]?.type;
+          
+          if (fieldType === 'keyword') {
+            fallbackSearchQueries.push(
+              { wildcard: { [fieldName]: `*${searchTerm.toLowerCase()}*` } },
+              { wildcard: { [fieldName]: `*${searchTerm.toUpperCase()}*` } },
+              { wildcard: { [fieldName]: `*${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1).toLowerCase()}*` } },
+              { wildcard: { [fieldName]: `*${searchTerm}*` } }
+            );
+          } else if (fieldType === 'text') {
+            fallbackSearchQueries.push(
+              { match: { [fieldName]: searchTerm } }
+            );
+          } else if (fieldType === 'integer' || fieldType === 'long' || fieldType === 'float' || fieldType === 'double') {
+            // For numeric fields, only try exact match if it's a number
+            const numValue = parseFloat(searchTerm);
+            if (!isNaN(numValue)) {
+              fallbackSearchQueries.push(
+                { term: { [fieldName]: numValue } }
+              );
+            }
+          } else if (fieldType === 'date') {
+            // For date fields in fallback, only try if it looks like a date
+            const dateRegex = /^\d{4}-\d{2}-\d{2}/;
+            if (dateRegex.test(searchTerm)) {
+              fallbackSearchQueries.push(
+                { term: { [fieldName]: searchTerm } }
+              );
+            }
+          }
+          // Skip other field types to avoid errors
+        });
+        
+        // Only add fallback queries if we have valid search queries
+        if (fallbackSearchQueries.length > 0) {
+          fallbackQueries.push(
+            // 1. Dynamic keyword search
+            {
+              query: {
+                bool: {
+                  should: fallbackSearchQueries,
+                  minimum_should_match: 1
+                }
+              }
+            },
+            // 2. Query string with wildcards (only on keyword and text fields)
+            {
+              query: {
+                query_string: {
+                  query: `*${searchTerm.toLowerCase()}* OR *${searchTerm.toUpperCase()}* OR *${searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1).toLowerCase()}* OR *${searchTerm}*`,
+                  fields: fieldNames.filter(fieldName => {
+                    const fieldType = indexFields[fieldName]?.type;
+                    return fieldType === 'keyword' || fieldType === 'text';
+                  }),
+                  default_operator: 'OR'
+                }
+              }
+            },
+            // 3. Multi-match query
+            {
+              query: {
+                multi_match: {
+                  query: searchTerm,
+                  fields: fieldNames,
+                  type: 'best_fields',
+                  operator: 'or'
+                }
+              }
+            },
+            // 4. Cross-fields search
+            {
+              query: {
+                multi_match: {
+                  query: searchTerm,
+                  fields: fieldNames,
+                  type: 'cross_fields',
+                  operator: 'or'
+                }
+              }
+            }
+          );
+        }
+      }
+      
+      // Try fallback queries
+      for (let i = 0; i < fallbackQueries.length; i++) {
+        let fallbackQuery = fallbackQueries[i];
+        
+        // Add filters to fallback queries if they exist
+        if (filterConditions.length > 0) {
+          fallbackQuery = {
+            query: {
+              bool: {
+                must: [
+                  fallbackQuery.query,
+                  ...filterConditions
+                ]
+              }
+            }
+          };
+        }
+        
+        const simpleQuery = {
+          index: indexName,
+          body: {
+            from,
+            size: parseInt(size),
+            sort: [{ [sortField]: { order: sortOrder } }],
+            _source: fields === '*' ? true : fields.split(','),
+            ...fallbackQuery
+          }
+        };
+        
+        try {
+          const fallbackResponse = await client.search(simpleQuery);
+          
+          if (fallbackResponse.hits.total.value > 0) {
+            response.hits = fallbackResponse.hits;
+            break;
+          }
+        } catch (fallbackError) {
+          console.error(`Fallback query ${i + 1} failed:`, fallbackError.message);
+          // Continue to next fallback query
+        }
+      }
+    }
+    
 
     res.json({
       success: true,
