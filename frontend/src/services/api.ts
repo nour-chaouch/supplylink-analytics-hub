@@ -207,6 +207,16 @@ export const adminAPI = {
 
   getIndexSchema: (indexName: string) =>
     api.get(`/admin/elasticsearch/indices/${indexName}/schema`),
+
+  // Filter Values API
+  getFilterValues: (indexName: string) =>
+    api.get(`/admin/elasticsearch/indices/${indexName}/filter-values`),
+  
+  getFieldValues: (indexName: string, fieldName: string) =>
+    api.get(`/admin/elasticsearch/indices/${indexName}/filter-values/${fieldName}`),
+  
+  clearFilterValues: (indexName: string) =>
+    api.delete(`/admin/elasticsearch/indices/${indexName}/filter-values`),
 };
 
 // Agricultural Data API

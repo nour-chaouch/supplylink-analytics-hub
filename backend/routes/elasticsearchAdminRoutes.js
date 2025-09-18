@@ -4,9 +4,7 @@ const multer = require('multer');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 const { getElasticsearchClient } = require('../config/elasticsearch');
 const { createIndex, deleteIndex, getIndexStats } = require('../config/elasticsearchMappings');
-const UserService = require('../services/UserService');
-const ProducerPriceService = require('../services/ProducerPriceService');
-const CropsLivestockService = require('../services/CropsLivestockService');
+const FilterValuesService = require('../services/FilterValuesService');
 
 // Supported file extensions for data import
 const SUPPORTED_EXTENSIONS = ['.json', '.csv', '.xlsx', '.xls'];
@@ -2050,6 +2048,75 @@ router.post('/indices/:indexName/documents/bulk', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: error.message 
+    });
+  }
+});
+
+// ==================== FILTER VALUES ROUTES ====================
+
+// Get filter values for an index
+router.get('/indices/:indexName/filter-values', protect, adminOnly, async (req, res) => {
+  try {
+    const { indexName } = req.params;
+    
+    const filterValues = await FilterValuesService.getFilterValues(indexName);
+    
+    res.json({
+      success: true,
+      data: filterValues
+    });
+  } catch (error) {
+    console.error('Get filter values error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Get values for a specific field
+router.get('/indices/:indexName/filter-values/:fieldName', protect, adminOnly, async (req, res) => {
+  try {
+    const { indexName, fieldName } = req.params;
+    
+    const fieldValues = await FilterValuesService.getFieldValues(indexName, fieldName);
+    
+    if (!fieldValues) {
+      return res.status(404).json({
+        success: false,
+        message: `No filter values found for field '${fieldName}' in index '${indexName}'`
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: fieldValues
+    });
+  } catch (error) {
+    console.error('Get field values error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Clear filter values for an index
+router.delete('/indices/:indexName/filter-values', protect, adminOnly, async (req, res) => {
+  try {
+    const { indexName } = req.params;
+    
+    await FilterValuesService.clearIndexFilterValues(indexName);
+    
+    res.json({
+      success: true,
+      message: `Filter values cleared for index '${indexName}'`
+    });
+  } catch (error) {
+    console.error('Clear filter values error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 });

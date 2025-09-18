@@ -16,12 +16,27 @@ interface IndexInfo {
   'dataset.size': string;
 }
 
+interface FilterValues {
+  fieldName: string;
+  fieldType: string;
+  values: Array<{
+    value: string;
+    count: number;
+  }>;
+  totalDocuments: number;
+}
+
 interface FieldInfo {
   name: string;
   type: string;
   description: string;
   example: string;
   required: boolean;
+  inputType?: string;
+  validation?: {
+    maxLength?: number;
+    step?: number;
+  };
 }
 
 interface SearchFilters {
@@ -32,6 +47,7 @@ const Search: React.FC = () => {
   const [selectedIndex, setSelectedIndex] = useState<string>('');
   const [indices, setIndices] = useState<IndexInfo[]>([]);
   const [indexFields, setIndexFields] = useState<FieldInfo[]>([]);
+  const [filterValues, setFilterValues] = useState<FilterValues[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({});
   const [sortField, setSortField] = useState('_score');
@@ -53,11 +69,52 @@ const Search: React.FC = () => {
   useEffect(() => {
     if (selectedIndex) {
       loadIndexFields(selectedIndex);
+      loadFilterValues(selectedIndex);
     } else {
       setIndexFields([]);
+      setFilterValues([]);
       setFilters({});
     }
   }, [selectedIndex]);
+
+  // Debug summary when both indexFields and filterValues are loaded
+  useEffect(() => {
+    if (indexFields.length > 0 && filterValues.length > 0) {
+      console.log('\n🎯 SUMMARY - Both indexFields and filterValues loaded:');
+      console.log('Index fields count:', indexFields.length);
+      console.log('Filter values count:', filterValues.length);
+      
+      // Check which fields should have select lists
+      const fieldsWithSelectLists = indexFields.filter(field => {
+        const fieldFilterValues = filterValues.find(fv => fv.fieldName === field.name);
+        return (field.type === 'keyword' || field.type === 'text') && 
+               fieldFilterValues && 
+               fieldFilterValues.values.length > 0 && 
+               fieldFilterValues.values.length <= 200; // Updated limit
+      });
+      
+      console.log('Fields that should render as select lists:', fieldsWithSelectLists.map(f => f.name));
+      
+      // Check which fields have filter values but won't render as select lists
+      const fieldsWithFilterValuesButNoSelect = indexFields.filter(field => {
+        const fieldFilterValues = filterValues.find(fv => fv.fieldName === field.name);
+        const shouldHaveSelect = (field.type === 'keyword' || field.type === 'text') && 
+                               fieldFilterValues && 
+                               fieldFilterValues.values.length > 0 && 
+                               fieldFilterValues.values.length <= 200; // Updated limit
+        return fieldFilterValues && !shouldHaveSelect;
+      });
+      
+      if (fieldsWithFilterValuesButNoSelect.length > 0) {
+        console.log('⚠️ Fields with filter values but NO select list:', fieldsWithFilterValuesButNoSelect.map(f => ({
+          name: f.name,
+          type: f.type,
+          inputType: f.inputType,
+          filterValuesCount: filterValues.find(fv => fv.fieldName === f.name)?.values.length
+        })));
+      }
+    }
+  }, [indexFields, filterValues]);
 
   const loadIndices = async () => {
     try {
@@ -72,15 +129,61 @@ const Search: React.FC = () => {
 
   const loadIndexFields = async (indexName: string) => {
     try {
+      console.log('\n📋 LOADING INDEX FIELDS for index:', indexName);
       const response = await adminAPI.getIndexSchema(indexName);
+      console.log('Index schema API response:', response.data);
+      
       if (response.data.success) {
         setIndexFields(response.data.data.fields);
+        console.log('✅ Index fields loaded successfully:', response.data.data.fields.length, 'fields');
+        
+        // Log details for each field
+        response.data.data.fields.forEach((field: FieldInfo, index: number) => {
+          console.log(`Field ${index + 1}:`, {
+            name: field.name,
+            type: field.type,
+            inputType: field.inputType,
+            required: field.required
+          });
+        });
+        
         // Reset filters when changing index
         setFilters({});
+      } else {
+        console.error('❌ Index schema API failed:', response.data);
       }
     } catch (err) {
-      console.error('Failed to load index fields:', err);
+      console.error('❌ Failed to load index fields:', err);
       setError('Failed to load index schema');
+    }
+  };
+
+  const loadFilterValues = async (indexName: string) => {
+    try {
+      console.log('\n🔍 LOADING FILTER VALUES for index:', indexName);
+      const response = await adminAPI.getFilterValues(indexName);
+      console.log('Filter values API response:', response.data);
+      
+      if (response.data.success) {
+        setFilterValues(response.data.data);
+        console.log('✅ Filter values loaded successfully:', response.data.data.length, 'fields');
+        
+        // Log details for each filter value
+        response.data.data.forEach((fv: FilterValues, index: number) => {
+          console.log(`Filter Value ${index + 1}:`, {
+            fieldName: fv.fieldName,
+            fieldType: fv.fieldType,
+            valuesCount: fv.values.length,
+            totalDocuments: fv.totalDocuments,
+            firstFewValues: fv.values.slice(0, 3).map((v: {value: string, count: number}) => `${v.value}(${v.count})`)
+          });
+        });
+      } else {
+        console.error('❌ Filter values API failed:', response.data);
+      }
+    } catch (err) {
+      console.error('❌ Failed to load filter values:', err);
+      // Don't set error for filter values failure, it's not critical
     }
   };
 
@@ -131,6 +234,89 @@ const Search: React.FC = () => {
     }
   };
 
+  const handlePageChange = async (newPage: number) => {
+    if (!selectedIndex || newPage < 1) return;
+    
+    setLoading(true);
+    setError(null);
+    setCurrentPage(newPage);
+    
+    try {
+      const params: any = {
+        page: newPage,
+        size: pageSize,
+        sortField,
+        sortOrder
+      };
+
+      // Add search term if provided
+      if (searchTerm.trim()) {
+        params.search = searchTerm.trim();
+      }
+
+      // Add filters
+      Object.keys(filters).forEach(key => {
+        if (filters[key] !== '' && filters[key] !== null && filters[key] !== undefined) {
+          params[`filter.${key}`] = filters[key];
+        }
+      });
+
+      const response = await adminAPI.getDocuments(selectedIndex, params);
+      if (response.data.success) {
+        setResults(response.data.data.documents);
+        setTotalResults(response.data.data.total);
+      } else {
+        setError(response.data.message || 'Page load failed');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Page load failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePageSizeChange = async (newPageSize: number) => {
+    if (!selectedIndex || newPageSize < 1) return;
+    
+    setLoading(true);
+    setError(null);
+    setPageSize(newPageSize);
+    setCurrentPage(1); // Reset to first page when changing page size
+    
+    try {
+      const params: any = {
+        page: 1,
+        size: newPageSize,
+        sortField,
+        sortOrder
+      };
+
+      // Add search term if provided
+      if (searchTerm.trim()) {
+        params.search = searchTerm.trim();
+      }
+
+      // Add filters
+      Object.keys(filters).forEach(key => {
+        if (filters[key] !== '' && filters[key] !== null && filters[key] !== undefined) {
+          params[`filter.${key}`] = filters[key];
+        }
+      });
+
+      const response = await adminAPI.getDocuments(selectedIndex, params);
+      if (response.data.success) {
+        setResults(response.data.data.documents);
+        setTotalResults(response.data.data.total);
+      } else {
+        setError(response.data.message || 'Page size change failed');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Page size change failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleFilterChange = (fieldName: string, value: string | number | boolean) => {
     // Convert string values to appropriate types based on field type
     let processedValue = value;
@@ -176,12 +362,88 @@ const Search: React.FC = () => {
 
   const renderFilterInput = (field: FieldInfo) => {
     const value = filters[field.name] || '';
+    
+    // Check if we have filter values for this field
+    // Try exact match first, then case-insensitive match
+    let fieldFilterValues = filterValues.find(fv => fv.fieldName === field.name);
+    
+    if (!fieldFilterValues) {
+      // Try case-insensitive match
+      fieldFilterValues = filterValues.find(fv => 
+        fv.fieldName.toLowerCase() === field.name.toLowerCase()
+      );
+    }
+    
+    // Comprehensive debugging for all fields
+    console.log(`\n=== RENDERING FILTER FOR: ${field.name} ===`);
+    console.log('Field type:', field.type);
+    console.log('Field inputType:', field.inputType);
+    console.log('FieldFilterValues found:', !!fieldFilterValues);
+    
+    if (fieldFilterValues) {
+      console.log('FieldFilterValues details:', {
+        fieldName: fieldFilterValues.fieldName,
+        fieldType: fieldFilterValues.fieldType,
+        valuesCount: fieldFilterValues.values.length,
+        totalDocuments: fieldFilterValues.totalDocuments,
+        firstFewValues: fieldFilterValues.values.slice(0, 3)
+      });
+    } else {
+      console.log('No filter values found for field:', field.name);
+      console.log('Available filter field names:', filterValues.map(fv => fv.fieldName));
+    }
+    
+    // Check if this field should render as select list
+    const shouldRenderSelect = (field.type === 'keyword' || field.type === 'text') && 
+                              fieldFilterValues && 
+                              fieldFilterValues.values.length > 0 && 
+                              fieldFilterValues.values.length <= 200; // Increased from 50 to 200
+    
+    console.log('Should render as select list:', shouldRenderSelect);
+    console.log('Conditions check:', {
+      isKeywordOrText: field.type === 'keyword' || field.type === 'text',
+      hasFilterValues: !!fieldFilterValues,
+      hasValues: fieldFilterValues ? fieldFilterValues.values.length > 0 : false,
+      valuesCountOk: fieldFilterValues ? fieldFilterValues.values.length <= 200 : false // Updated limit
+    });
 
-    switch (field.type) {
+    // For keyword and text fields, check if we have filter values first
+    if (shouldRenderSelect && fieldFilterValues) {
+      console.log(`✅ RENDERING SELECT LIST for ${field.name}`);
+      
+      return (
+        <div className="relative">
+          <select
+            value={String(value)}
+            onChange={(e) => handleFilterChange(field.name, e.target.value)}
+            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+          >
+            <option value="">All ({fieldFilterValues.totalDocuments})</option>
+            {fieldFilterValues.values.map((item, index) => (
+              <option key={index} value={item.value}>
+                {item.value} ({item.count})
+              </option>
+            ))}
+          </select>
+          {fieldFilterValues.values.length > 50 && (
+            <div className="text-xs text-gray-500 mt-1">
+              {fieldFilterValues.values.length} options available
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Use the schema's inputType or fall back to field type
+    const inputType = field.inputType || field.type;
+    console.log(`❌ RENDERING ${inputType.toUpperCase()} INPUT for ${field.name}`);
+
+    switch (inputType) {
       case 'integer':
       case 'long':
       case 'float':
       case 'double':
+      case 'number':
         return (
           <input
             type="number"
@@ -207,16 +469,31 @@ const Search: React.FC = () => {
         );
       
       case 'date':
+      case 'datetime-local':
         return (
           <input
-            type="date"
+            type={inputType === 'datetime-local' ? 'datetime-local' : 'date'}
             value={String(value)}
             onChange={(e) => handleFilterChange(field.name, e.target.value)}
             className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
           />
         );
       
+      case 'textarea':
+        return (
+          <textarea
+            value={String(value)}
+            onChange={(e) => handleFilterChange(field.name, e.target.value)}
+            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            placeholder={`Filter by ${field.name}`}
+            rows={2}
+          />
+        );
+      
+      case 'keyword':
+      case 'text':
       default:
+        // Fallback to text input for keyword/text fields without filter values
         return (
           <input
             type="text"
@@ -434,8 +711,16 @@ const Search: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">
                 Search Results ({(totalResults || 0).toLocaleString()})
               </h3>
-              <div className="text-sm text-gray-500">
-                Showing {(results?.length || 0)} of {(totalResults || 0).toLocaleString()}
+              <div className="flex items-center space-x-4">
+                <div className="text-sm text-gray-500">
+                  Showing {(results?.length || 0)} of {(totalResults || 0).toLocaleString()}
+                </div>
+                {loading && (
+                  <div className="flex items-center space-x-2 text-sm text-indigo-600">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                    <span>Loading...</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -443,10 +728,28 @@ const Search: React.FC = () => {
           <div className="divide-y divide-gray-200">
             {results.map((result, index) => {
               console.log('Rendering result:', result);
+              const globalIndex = (currentPage - 1) * pageSize + index + 1;
               return (
-              <div key={index} className="p-6 hover:bg-gray-50">
+              <div key={index} className="p-6 hover:bg-gray-50 transition-colors">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
+                    {/* Document Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm font-medium text-gray-500">#{globalIndex}</span>
+                        <span className="text-xs text-gray-400">•</span>
+                        <span className="text-sm text-gray-500">Document ID: {result._id}</span>
+                      </div>
+                      {/*
+                      result._score && (
+                        <div className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          Score: {result._score.toFixed(2)}
+                        </div>
+                      )
+                      */}
+                    </div>
+
+                    {/* Document Fields */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {Object.entries(result._source || {}).map(([key, value]) => {
                         if (key.startsWith('_')) return null;
@@ -455,7 +758,7 @@ const Search: React.FC = () => {
                             <span className="font-medium text-gray-700">
                               {getFieldDisplayName(key)}:
                             </span>
-                            <span className="ml-2 text-gray-900">
+                            <span className="ml-2 text-gray-900 break-words">
                               {value !== null && value !== undefined ? String(value) : 'N/A'}
                             </span>
                           </div>
@@ -468,6 +771,101 @@ const Search: React.FC = () => {
               );
             })}
           </div>
+          
+          {/* Pagination */}
+          {totalResults > pageSize && (
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <div className="flex items-center justify-between">
+                {/* Page Size Selector */}
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-700">Show:</label>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => handlePageSizeChange(parseInt(e.target.value))}
+                    className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    disabled={loading}
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <span className="text-sm text-gray-700">per page</span>
+                </div>
+
+                {/* Pagination Info */}
+                <div className="text-sm text-gray-700">
+                  Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalResults)} of {totalResults.toLocaleString()} results
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex items-center space-x-1">
+                  {/* First Page */}
+                  <button
+                    onClick={() => handlePageChange(1)}
+                    disabled={currentPage === 1 || loading}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    First
+                  </button>
+
+                  {/* Previous Page */}
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1 || loading}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+
+                  {/* Page Numbers */}
+                  {(() => {
+                    const totalPages = Math.ceil(totalResults / pageSize);
+                    const maxVisiblePages = 5;
+                    const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                    
+                    const pages = [];
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(
+                        <button
+                          key={i}
+                          onClick={() => handlePageChange(i)}
+                          disabled={loading}
+                          className={`px-3 py-1 text-sm border rounded ${
+                            i === currentPage
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'border-gray-300 hover:bg-gray-50'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {i}
+                        </button>
+                      );
+                    }
+                    return pages;
+                  })()}
+
+                  {/* Next Page */}
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage >= Math.ceil(totalResults / pageSize) || loading}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+
+                  {/* Last Page */}
+                  <button
+                    onClick={() => handlePageChange(Math.ceil(totalResults / pageSize))}
+                    disabled={currentPage >= Math.ceil(totalResults / pageSize) || loading}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Last
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
