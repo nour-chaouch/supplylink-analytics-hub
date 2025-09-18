@@ -195,12 +195,130 @@ const DataImportWizard: React.FC<DataImportWizardProps> = ({
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['application/json', 'text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
+    const validExtensions = ['.json', '.csv', '.xlsx', '.xls'];
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    
+    if (!validTypes.includes(file.type) && !validExtensions.includes(fileExtension)) {
+      setError('Invalid file type. Please select a JSON, CSV, or Excel file.');
+      return;
+    }
+
+    // Check file size and warn for very large files
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > 1000) {
+      console.log(`Very large file detected: ${fileSizeMB.toFixed(2)}MB. Processing may take significant time.`);
+    }
+
+    // For JSON files, do basic validation with chunked reading for large files
+    if (file.type === 'application/json' || file.name.endsWith('.json')) {
+      const fileSizeMB = file.size / (1024 * 1024);
+      
+      if (fileSizeMB > 100) {
+        // For large files, use chunked validation
+        console.log(`Large file detected: ${fileSizeMB.toFixed(2)}MB. Using chunked validation.`);
+        validateLargeJsonFileChunked(file).then(() => {
+          setSelectedFile(file);
+          setError(null);
+          setTimeout(() => setCurrentStep(2), 500);
+        }).catch((error) => {
+          setError(`Invalid JSON file: ${error.message}`);
+        });
+        return;
+      } else {
+        // For smaller files, use the full text method
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const text = e.target?.result as string;
+            const trimmed = text.trim();
+            
+            if (!trimmed) {
+              setError('JSON file is empty.');
+              return;
+            }
+            
+            if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
+              setError('Invalid JSON format. File must start with [ or {');
+              return;
+            }
+            
+            // Basic structure check
+            if (trimmed.startsWith('[') && !trimmed.endsWith(']')) {
+              setError('JSON array appears to be incomplete. Please check if the file was uploaded completely.');
+              return;
+            }
+            
+            if (trimmed.startsWith('{') && !trimmed.endsWith('}')) {
+              setError('JSON object appears to be incomplete. Please check if the file was uploaded completely.');
+              return;
+            }
+            
+            setSelectedFile(file);
+            setError(null);
+            setTimeout(() => setCurrentStep(2), 500);
+          } catch (error: any) {
+            setError(`Invalid JSON file: ${error.message}`);
+          }
+        };
+        reader.readAsText(file);
+        return;
+      }
+    } else {
       setSelectedFile(file);
       setError(null);
-      // Auto-advance to next step
       setTimeout(() => setCurrentStep(2), 500);
     }
+  };
+
+  // Validate large JSON files by reading chunks
+  const validateLargeJsonFileChunked = async (file: File): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      // Read first 1KB to check start
+      const firstChunk = file.slice(0, 1024);
+      reader.onload = (e) => {
+        const firstText = e.target?.result as string;
+        if (!firstText.trim()) {
+          reject(new Error('JSON file is empty.'));
+          return;
+        }
+        
+        if (!firstText.trim().startsWith('[') && !firstText.trim().startsWith('{')) {
+          reject(new Error('Invalid JSON format. File must start with [ or {'));
+          return;
+        }
+        
+        // Read last 1KB to check end
+        const lastChunk = file.slice(file.size - 1024, file.size);
+        const lastReader = new FileReader();
+        lastReader.onload = (e) => {
+          const lastText = e.target?.result as string;
+          const trimmedLast = lastText.trim();
+          
+          if (firstText.trim().startsWith('[') && !trimmedLast.endsWith(']')) {
+            reject(new Error('JSON array appears to be incomplete. Please check if the file was uploaded completely.'));
+            return;
+          }
+          
+          if (firstText.trim().startsWith('{') && !trimmedLast.endsWith('}')) {
+            reject(new Error('JSON object appears to be incomplete. Please check if the file was uploaded completely.'));
+            return;
+          }
+          
+          resolve();
+        };
+        lastReader.onerror = () => reject(new Error('Failed to read file end'));
+        lastReader.readAsText(lastChunk);
+      };
+      
+      reader.onerror = () => reject(new Error('Failed to read file start'));
+      reader.readAsText(firstChunk);
+    });
   };
 
   const analyzeFieldTypes = (data: any[]): FieldAnalysis[] => {
@@ -762,7 +880,13 @@ const DataImportWizard: React.FC<DataImportWizardProps> = ({
               <div className="text-center">
                 <Upload className="h-16 w-16 text-blue-500 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold mb-2">Select Your Data File</h3>
-                <p className="text-gray-600">Choose a file to import into the {indexName} index</p>
+                <p className="text-gray-600 mb-2">Choose a file to import into the {indexName} index</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-w-md mx-auto">
+                  <p className="text-sm text-blue-800">
+                    <strong>Large files supported:</strong> Files of any size can be imported. 
+                    The system will show progress updates during processing.
+                  </p>
+                </div>
               </div>
 
               {/* Supported Formats */}

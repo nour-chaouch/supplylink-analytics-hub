@@ -101,14 +101,24 @@ export const adminAPI = {
   getElasticsearchIndices: () =>
     api.get('/admin/elasticsearch/indices'),
 
-  createElasticsearchIndex: (indexName: string, mapping?: any) =>
-    api.post('/admin/elasticsearch/indices', { indexName, mapping }),
+  createElasticsearchIndex: (indexName: string, mapping?: any, metadata?: any) =>
+    api.post('/admin/elasticsearch/indices', { indexName, mapping, metadata }),
 
   createPredefinedIndices: () =>
     api.post('/admin/elasticsearch/indices/predefined'),
 
   deleteElasticsearchIndex: (indexName: string) =>
     api.delete(`/admin/elasticsearch/indices/${indexName}`),
+
+  // Index metadata management
+  getIndexMetadata: (indexName: string) =>
+    api.get(`/admin/elasticsearch/indices/${indexName}/metadata`),
+
+  updateIndexMetadata: (indexName: string, metadata: any) =>
+    api.put(`/admin/elasticsearch/indices/${indexName}/metadata`, metadata),
+
+  deleteIndexMetadata: (indexName: string) =>
+    api.delete(`/admin/elasticsearch/indices/${indexName}/metadata`),
 
   importElasticsearchData: (indexName: string, file: File) => {
     const formData = new FormData();

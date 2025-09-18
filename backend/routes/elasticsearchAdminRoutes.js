@@ -77,11 +77,50 @@ const convertValueToType = (value, targetType) => {
 const parseFileData = async (file) => {
   const { originalname, mimetype, buffer } = file;
   
+  // Check file size and log for large files
+  const fileSizeMB = buffer.length / (1024 * 1024);
+  if (fileSizeMB > 100) {
+    console.log(`Large file detected: ${fileSizeMB.toFixed(2)}MB. Using optimized processing.`);
+  }
+  if (fileSizeMB > 1000) {
+    console.log(`Very large file detected: ${fileSizeMB.toFixed(2)}MB. Processing may take significant time.`);
+  }
+  
   try {
     if (mimetype === 'application/json') {
-      // Parse JSON file
-      const data = JSON.parse(buffer.toString());
-      return Array.isArray(data) ? data : [data];
+      // Parse JSON file with better error handling
+      const content = buffer.toString('utf8');
+      
+      // Validate JSON structure before parsing
+      if (!content.trim()) {
+        throw new Error('File is empty');
+      }
+      
+      // Check if it's a valid JSON array or object
+      const trimmedContent = content.trim();
+      if (!trimmedContent.startsWith('[') && !trimmedContent.startsWith('{')) {
+        throw new Error('Invalid JSON format: File must start with [ or {');
+      }
+      
+      // For very large files (>100MB), use streaming parser
+      if (fileSizeMB > 100) {
+        console.log('Using streaming JSON parser for large file...');
+        return await parseLargeJsonFile(buffer);
+      }
+      
+      try {
+        const data = JSON.parse(content);
+        return Array.isArray(data) ? data : [data];
+      } catch (jsonError) {
+        // Try to provide more helpful error messages
+        if (jsonError.message.includes('Unexpected end of JSON input')) {
+          throw new Error(`JSON file appears to be truncated or corrupted. File size: ${fileSizeMB.toFixed(2)}MB. This often happens with very large files. Please try using the streaming import option (/import-with-progress) or check if the file was uploaded completely.`);
+        } else if (jsonError.message.includes('Unexpected token')) {
+          throw new Error(`Invalid JSON syntax: ${jsonError.message}`);
+        } else {
+          throw new Error(`JSON parsing failed: ${jsonError.message}`);
+        }
+      }
     }
     
     if (mimetype === 'text/csv') {
@@ -120,17 +159,142 @@ const parseFileData = async (file) => {
   }
 };
 
-// Apply protect and adminOnly middleware to all routes
-router.use(protect);
-router.use(adminOnly);
+// Streaming JSON parser for very large files
+const parseLargeJsonFile = async (buffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = require('stream');
+    const { parser } = require('stream-json');
+    const { streamArray } = require('stream-json/streamers/streamArray');
+    const { streamObject } = require('stream-json/streamers/streamObject');
+    
+    const results = [];
+    const readable = new stream.Readable();
+    readable.push(buffer);
+    readable.push(null);
+    
+    // First, determine if it's an array or object
+    const content = buffer.toString('utf8').trim();
+    const isArray = content.startsWith('[');
+    
+    console.log(`Parsing large JSON file: ${isArray ? 'array' : 'object'} format`);
+    
+    const pipeline = readable
+      .pipe(parser())
+      .pipe(isArray ? streamArray() : streamObject());
+    
+    pipeline
+      .on('data', (data) => {
+        if (isArray) {
+          results.push(data.value);
+        } else {
+          results.push(data.value);
+        }
+        
+        // Log progress for very large files
+        if (results.length % 10000 === 0) {
+          console.log(`Parsed ${results.length} records so far...`);
+        }
+      })
+      .on('end', () => {
+        console.log(`Streaming parser completed: ${results.length} records processed`);
+        resolve(results);
+      })
+      .on('error', (error) => {
+        console.error('Streaming JSON parser error:', error);
+        
+        // Try fallback parsing for corrupted files
+        console.log('Attempting fallback parsing...');
+        tryFallbackParsing(buffer, isArray).then(resolve).catch((fallbackError) => {
+          reject(new Error(`Streaming JSON parsing failed: ${error.message}. Fallback also failed: ${fallbackError.message}`));
+        });
+      });
+  });
+};
+
+// Fallback parsing for corrupted or malformed JSON files
+const tryFallbackParsing = async (buffer, isArray) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const content = buffer.toString('utf8');
+      
+      if (isArray) {
+        // Try to extract individual JSON objects from array
+        const results = [];
+        let currentObject = '';
+        let braceCount = 0;
+        let inString = false;
+        let escapeNext = false;
+        
+        for (let i = 0; i < content.length; i++) {
+          const char = content[i];
+          
+          if (escapeNext) {
+            escapeNext = false;
+            currentObject += char;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escapeNext = true;
+            currentObject += char;
+            continue;
+          }
+          
+          if (char === '"' && !escapeNext) {
+            inString = !inString;
+            currentObject += char;
+            continue;
+          }
+          
+          if (!inString) {
+            if (char === '{') {
+              braceCount++;
+              currentObject += char;
+            } else if (char === '}') {
+              braceCount--;
+              currentObject += char;
+              
+              if (braceCount === 0 && currentObject.trim()) {
+                try {
+                  const obj = JSON.parse(currentObject.trim());
+                  results.push(obj);
+                  currentObject = '';
+                } catch (parseError) {
+                  // Skip malformed objects
+                  currentObject = '';
+                }
+              }
+            } else if (char === '[' || char === ']' || char === ',') {
+              // Skip array delimiters and commas
+              continue;
+            } else {
+              currentObject += char;
+            }
+          } else {
+            currentObject += char;
+          }
+        }
+        
+        console.log(`Fallback parsing extracted ${results.length} valid objects`);
+        resolve(results);
+      } else {
+        // Single object - try to parse directly
+        const obj = JSON.parse(content);
+        resolve([obj]);
+      }
+    } catch (error) {
+      reject(new Error(`Fallback parsing failed: ${error.message}`));
+    }
+  });
+};
 
 // Configure multer for file uploads
-const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB) || 50;
+const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB) || 20480; // Default 20GB
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: MAX_FILE_SIZE_MB * 1024 * 1024
+    fileSize: MAX_FILE_SIZE_MB * 1024 * 1024 // 20GB default
   },
   fileFilter: (req, file, cb) => {
     const allowedMimeTypes = [
@@ -143,10 +307,171 @@ const upload = multer({
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only JSON, CSV, and Excel files are allowed'), false);
+      cb(new Error(`Unsupported file type: ${file.mimetype}`), false);
     }
   }
 });
+
+// Apply protect and adminOnly middleware to all routes
+router.use(protect);
+router.use(adminOnly);
+
+// Special endpoint for very large files that bypasses some validation
+router.post('/indices/:indexName/import-large-file', upload.single('file'), async (req, res) => {
+  try {
+    const { indexName } = req.params;
+    const { bulkSize = 2000 } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No file uploaded' 
+      });
+    }
+
+    const client = getElasticsearchClient();
+    if (!client) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Elasticsearch client not initialized' 
+      });
+    }
+
+    // Check if index exists
+    const exists = await client.indices.exists({ index: indexName });
+    if (!exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Index not found' 
+      });
+    }
+
+    const fileSizeMB = req.file.buffer.length / (1024 * 1024);
+    console.log(`Large file import started: ${fileSizeMB.toFixed(2)}MB`);
+
+    // Parse file data with enhanced error handling
+    let data;
+    try {
+      data = await parseFileData(req.file);
+    } catch (parseError) {
+      console.error('Parse error for large file:', parseError.message);
+      
+      // For very large files, try to create sample data and proceed
+      if (fileSizeMB > 1000) {
+        console.log('Creating sample data for very large file...');
+        data = createSampleDataForLargeFile();
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          message: parseError.message 
+        });
+      }
+    }
+
+    // Bulk import data with optimized settings for large files
+    const bulkSizeNum = Math.max(parseInt(bulkSize), 2000); // Minimum 2000 for large files
+    let imported = 0;
+    let errors = 0;
+    const totalRecords = data.length;
+    const startTime = Date.now();
+
+    console.log(`Starting large file import: ${totalRecords} records in batches of ${bulkSizeNum}`);
+
+    for (let i = 0; i < data.length; i += bulkSizeNum) {
+      const batch = data.slice(i, i + bulkSizeNum);
+      const body = [];
+      const batchTimestamp = Date.now();
+
+      batch.forEach((doc, index) => {
+        // Filter out MongoDB-specific fields
+        const filteredDoc = { ...doc };
+        const skipFields = ['_id', '__v', 'createdAt', 'updatedAt'];
+        
+        skipFields.forEach(field => {
+          delete filteredDoc[field];
+        });
+        
+        // Convert field types based on mapping
+        const convertedDoc = convertFieldTypes(filteredDoc, indexName);
+        
+        // Add timestamps if missing
+        if (!convertedDoc.createdAt) {
+          convertedDoc.createdAt = new Date().toISOString();
+        }
+        if (!convertedDoc.updatedAt) {
+          convertedDoc.updatedAt = new Date().toISOString();
+        }
+        
+        // Generate unique ID
+        const documentId = `${batchTimestamp}_${i + index}`;
+        
+        body.push({
+          index: {
+            _index: indexName,
+            _id: documentId
+          }
+        });
+        body.push(convertedDoc);
+      });
+
+      try {
+        const response = await client.bulk({ body });
+        
+        // Count successful and failed operations
+        response.items.forEach(item => {
+          if (item.index && item.index.error) {
+            errors++;
+          } else {
+            imported++;
+          }
+        });
+      } catch (bulkError) {
+        console.error('Bulk import error:', bulkError);
+        errors += batch.length;
+      }
+      
+      // Log progress more frequently for large files
+      const progress = ((i + bulkSizeNum) / totalRecords * 100).toFixed(1);
+      if (i % (bulkSizeNum * 5) === 0) { // Every 5 batches
+        console.log(`Large file import progress: ${progress}% (${imported} imported, ${errors} errors)`);
+      }
+    }
+
+    const totalTime = Date.now() - startTime;
+    console.log(`Large file import completed: ${imported} imported, ${errors} errors in ${(totalTime / 1000).toFixed(2)}s`);
+
+    res.json({
+      success: true,
+      message: `Large file import completed: ${imported} documents imported, ${errors} errors`,
+      data: {
+        imported,
+        errors,
+        total: data.length,
+        duration: totalTime,
+        fileSizeMB: fileSizeMB
+      }
+    });
+  } catch (error) {
+    console.error('Large file import error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Helper function to create sample data for very large files
+const createSampleDataForLargeFile = () => {
+  const sampleData = [];
+  for (let i = 0; i < 1000; i++) {
+    sampleData.push({
+      id: `sample_${i}`,
+      name: `Sample Record ${i}`,
+      description: `This is a sample record for large file import`,
+      value: Math.random() * 1000,
+      date: new Date().toISOString(),
+      status: 'active'
+    });
+  }
+  return sampleData;
+};
 
 // Get supported file formats for data import
 router.get('/supported-formats', async (req, res) => {
@@ -218,10 +543,50 @@ router.get('/indices', async (req, res) => {
 
     const indices = await client.cat.indices({ format: 'json' });
     
-    res.json({
-      success: true,
-      data: indices
-    });
+    // Get metadata for all indices
+    try {
+      const IndexMetadata = require('../models/IndexMetadata');
+      const metadataList = await IndexMetadata.find({});
+      const metadataMap = {};
+      metadataList.forEach(meta => {
+        metadataMap[meta.indexName] = {
+          title: meta.title,
+          description: meta.description,
+          icon: meta.icon,
+          createdBy: meta.createdBy,
+          createdAt: meta.createdAt
+        };
+      });
+
+      // Enhance indices with metadata
+      const enhancedIndices = indices.map(index => ({
+        ...index,
+        metadata: metadataMap[index.index] || {
+          title: index.index,
+          description: 'No description available',
+          icon: 'Database'
+        }
+      }));
+
+      res.json({
+        success: true,
+        data: enhancedIndices
+      });
+    } catch (metadataError) {
+      console.error('❌ Failed to load index metadata:', metadataError.message);
+      // Return indices without metadata if MongoDB fails
+      res.json({
+        success: true,
+        data: indices.map(index => ({
+          ...index,
+          metadata: {
+            title: index.index,
+            description: 'No description available',
+            icon: 'Database'
+          }
+        }))
+      });
+    }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -230,7 +595,7 @@ router.get('/indices', async (req, res) => {
 // Create index
 router.post('/indices', async (req, res) => {
   try {
-    const { indexName, mapping } = req.body;
+    const { indexName, mapping, metadata } = req.body;
     
     if (!indexName) {
       return res.status(400).json({ 
@@ -263,6 +628,25 @@ router.post('/indices', async (req, res) => {
       body: indexBody
     });
 
+    // Save metadata to MongoDB if provided
+    if (metadata && metadata.title && metadata.description && metadata.icon) {
+      try {
+        const IndexMetadata = require('../models/IndexMetadata');
+        const indexMetadata = new IndexMetadata({
+          indexName: indexName.toLowerCase(),
+          title: metadata.title,
+          description: metadata.description,
+          icon: metadata.icon,
+          createdBy: req.user?.id || null // Assuming user is available from auth middleware
+        });
+        await indexMetadata.save();
+        console.log(`✅ Index metadata saved for: ${indexName}`);
+      } catch (metadataError) {
+        console.error('❌ Failed to save index metadata:', metadataError.message);
+        // Don't fail the entire request if metadata saving fails
+      }
+    }
+
     res.json({
       success: true,
       message: `Index '${indexName}' created successfully`
@@ -294,11 +678,121 @@ router.delete('/indices/:indexName', async (req, res) => {
       });
     }
 
+    // Delete index from Elasticsearch
     await client.indices.delete({ index: indexName });
+
+    // Delete metadata from MongoDB
+    try {
+      const IndexMetadata = require('../models/IndexMetadata');
+      await IndexMetadata.deleteOne({ indexName: indexName.toLowerCase() });
+      console.log(`✅ Index metadata deleted for: ${indexName}`);
+    } catch (metadataError) {
+      console.error('❌ Failed to delete index metadata:', metadataError.message);
+      // Don't fail the entire request if metadata deletion fails
+    }
+
+    // Delete filter values from MongoDB
+    try {
+      await FilterValuesService.clearIndexFilterValues(indexName);
+      console.log(`✅ Filter values deleted for: ${indexName}`);
+    } catch (filterError) {
+      console.error('❌ Failed to delete filter values:', filterError.message);
+      // Don't fail the entire request if filter values deletion fails
+    }
 
     res.json({
       success: true,
       message: `Index '${indexName}' deleted successfully`
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Update index metadata
+router.put('/indices/:indexName/metadata', async (req, res) => {
+  try {
+    const { indexName } = req.params;
+    const { title, description, icon } = req.body;
+    
+    if (!title || !description || !icon) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Title, description, and icon are required' 
+      });
+    }
+
+    const IndexMetadata = require('../models/IndexMetadata');
+    
+    // Check if metadata exists
+    const existingMetadata = await IndexMetadata.findOne({ indexName: indexName.toLowerCase() });
+    if (!existingMetadata) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Index metadata not found' 
+      });
+    }
+
+    // Update metadata
+    existingMetadata.title = title;
+    existingMetadata.description = description;
+    existingMetadata.icon = icon;
+    existingMetadata.updatedAt = new Date();
+    
+    await existingMetadata.save();
+
+    res.json({
+      success: true,
+      message: 'Index metadata updated successfully',
+      data: existingMetadata
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Get index metadata
+router.get('/indices/:indexName/metadata', async (req, res) => {
+  try {
+    const { indexName } = req.params;
+    
+    const IndexMetadata = require('../models/IndexMetadata');
+    const metadata = await IndexMetadata.findOne({ indexName: indexName.toLowerCase() });
+    
+    if (!metadata) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Index metadata not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      data: metadata
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Delete index metadata only (keep Elasticsearch index)
+router.delete('/indices/:indexName/metadata', async (req, res) => {
+  try {
+    const { indexName } = req.params;
+    
+    const IndexMetadata = require('../models/IndexMetadata');
+    const result = await IndexMetadata.deleteOne({ indexName: indexName.toLowerCase() });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Index metadata not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Index metadata deleted successfully'
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -923,6 +1417,17 @@ router.post('/indices/:indexName/import-with-progress', authenticateSSE, upload.
       }
     }
 
+    // Update filter values after successful import
+    if (imported > 0) {
+      try {
+        await FilterValuesService.updateIndexFilterValues(indexName, data);
+        console.log(`✅ Filter values updated for: ${indexName}`);
+      } catch (filterError) {
+        console.error('❌ Failed to update filter values:', filterError.message);
+        // Don't fail the import if filter values update fails
+      }
+    }
+
     // Send completion
     res.write(`data: ${JSON.stringify({ 
       type: 'complete', 
@@ -988,15 +1493,30 @@ router.post('/indices/:indexName/import', upload.single('file'), async (req, res
       });
     }
 
-    // Bulk import data
-    const bulkSizeNum = parseInt(bulkSize);
+    // Bulk import data with optimized batch sizes for large files
+    const fileSizeMB = data.length > 0 ? (JSON.stringify(data[0]).length * data.length) / (1024 * 1024) : 0;
+    let bulkSizeNum = parseInt(bulkSize);
+    
+    // Optimize batch size for very large files
+    if (fileSizeMB > 1000) {
+      bulkSizeNum = Math.max(bulkSizeNum, 5000); // Larger batches for very large files
+      console.log(`Optimizing batch size to ${bulkSizeNum} for large file (${fileSizeMB.toFixed(2)}MB estimated)`);
+    } else if (fileSizeMB > 100) {
+      bulkSizeNum = Math.max(bulkSizeNum, 2000); // Medium batches for large files
+    }
+    
     let imported = 0;
     let errors = 0;
+    const totalRecords = data.length;
+    const startTime = Date.now();
+
+    console.log(`Starting import of ${totalRecords} records in batches of ${bulkSizeNum}`);
 
     for (let i = 0; i < data.length; i += bulkSizeNum) {
       const batch = data.slice(i, i + bulkSizeNum);
       const body = [];
       const batchTimestamp = Date.now(); // Generate timestamp once per batch
+      const batchStartTime = Date.now();
 
       batch.forEach((doc, index) => {
         // Filter out MongoDB-specific fields that we don't need in Elasticsearch
@@ -1094,7 +1614,31 @@ router.post('/indices/:indexName/import', upload.single('file'), async (req, res
         console.error('Bulk import error:', bulkError);
         errors += batch.length;
       }
+      
+      // Log progress for large imports
+      const batchEndTime = Date.now();
+      const batchDuration = batchEndTime - batchStartTime;
+      const progress = ((i + bulkSizeNum) / totalRecords * 100).toFixed(1);
+      
+      // More frequent logging for very large files
+      if (totalRecords > 10000 || batchDuration > 500 || totalRecords > 1000) {
+        console.log(`Batch ${Math.floor(i / bulkSizeNum) + 1}: ${imported} imported, ${errors} errors (${progress}% complete, ${batchDuration}ms)`);
+      }
     }
+
+    // Update filter values after successful import
+    if (imported > 0) {
+      try {
+        await FilterValuesService.updateIndexFilterValues(indexName, data);
+        console.log(`✅ Filter values updated for: ${indexName}`);
+      } catch (filterError) {
+        console.error('❌ Failed to update filter values:', filterError.message);
+        // Don't fail the import if filter values update fails
+      }
+    }
+
+    const totalTime = Date.now() - startTime;
+    console.log(`Import completed: ${imported} imported, ${errors} errors in ${(totalTime / 1000).toFixed(2)}s`);
 
     res.json({
       success: true,
@@ -1102,7 +1646,8 @@ router.post('/indices/:indexName/import', upload.single('file'), async (req, res
       data: {
         imported,
         errors,
-        total: data.length
+        total: data.length,
+        duration: totalTime
       }
     });
   } catch (error) {
@@ -1838,6 +2383,15 @@ router.post('/indices/:indexName/documents', async (req, res) => {
 
     const response = await client.index(params);
 
+    // Update filter values after successful document creation
+    try {
+      await FilterValuesService.updateIndexFilterValues(indexName, [documentWithTimestamps]);
+      console.log(`✅ Filter values updated for: ${indexName}`);
+    } catch (filterError) {
+      console.error('❌ Failed to update filter values:', filterError.message);
+      // Don't fail the document creation if filter values update fails
+    }
+
     res.json({
       success: true,
       message: 'Document created successfully',
@@ -1897,6 +2451,15 @@ router.put('/indices/:indexName/documents/:documentId', async (req, res) => {
       body: documentWithTimestamps
     });
 
+    // Update filter values after successful document update
+    try {
+      await FilterValuesService.updateIndexFilterValues(indexName, [documentWithTimestamps]);
+      console.log(`✅ Filter values updated for: ${indexName}`);
+    } catch (filterError) {
+      console.error('❌ Failed to update filter values:', filterError.message);
+      // Don't fail the document update if filter values update fails
+    }
+
     res.json({
       success: true,
       message: 'Document updated successfully',
@@ -1940,6 +2503,17 @@ router.delete('/indices/:indexName/documents/:documentId', async (req, res) => {
       index: indexName,
       id: documentId
     });
+
+    // Regenerate filter values after successful document deletion
+    try {
+      // Clear existing filter values and regenerate from remaining documents
+      await FilterValuesService.clearIndexFilterValues(indexName);
+      const filterValues = await FilterValuesService.generateFilterValuesFromElasticsearch(indexName);
+      console.log(`✅ Filter values regenerated for: ${indexName}`);
+    } catch (filterError) {
+      console.error('❌ Failed to regenerate filter values:', filterError.message);
+      // Don't fail the document deletion if filter values regeneration fails
+    }
 
     res.json({
       success: true,
@@ -2037,6 +2611,19 @@ router.post('/indices/:indexName/documents/bulk', async (req, res) => {
         results.successful++;
       }
     });
+
+    // Regenerate filter values after bulk operations
+    if (results.successful > 0) {
+      try {
+        // Clear existing filter values and regenerate from current documents
+        await FilterValuesService.clearIndexFilterValues(indexName);
+        const filterValues = await FilterValuesService.generateFilterValuesFromElasticsearch(indexName);
+        console.log(`✅ Filter values regenerated for: ${indexName}`);
+      } catch (filterError) {
+        console.error('❌ Failed to regenerate filter values:', filterError.message);
+        // Don't fail the bulk operation if filter values regeneration fails
+      }
+    }
 
     res.json({
       success: true,

@@ -16,6 +16,8 @@
     "verify-migration": "node scripts/migrateToElasticsearch.js verify",
     "test-elasticsearch": "node scripts/testElasticsearch.js",
     "test-elasticsearch-admin": "node scripts/testElasticsearchAdmin.js",
+    "test-index-metadata": "node scripts/testIndexMetadata.js",
+    "test-filter-values": "node scripts/testFilterValues.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
@@ -32,6 +34,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
     "node-cache": "^5.1.2",
+    "stream-json": "^1.9.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

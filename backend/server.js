@@ -12,7 +12,8 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '20gb' })); // Increased limit for large file uploads
+app.use(express.urlencoded({ limit: '20gb', extended: true })); // Increased limit for large file uploads
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true

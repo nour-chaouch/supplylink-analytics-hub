@@ -1,6 +1,31 @@
 import React, { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { adminAPI } from '../services/api';
-import { Search as SearchIcon, Filter, Download, Database, ChevronDown, X } from 'lucide-react';
+import { 
+  Search as SearchIcon, 
+  Filter, 
+  Download, 
+  Database, 
+  ChevronDown, 
+  X,
+  BarChart3,
+  TrendingUp,
+  Users,
+  Package,
+  MapPin,
+  Calendar,
+  FileText,
+  ShoppingCart,
+  Globe,
+  Heart,
+  Car,
+  Home,
+  Briefcase,
+  Book,
+  Edit,
+  Settings
+} from 'lucide-react';
+import { RootState } from '../store/store';
 
 interface IndexInfo {
   health: string;
@@ -14,6 +39,13 @@ interface IndexInfo {
   'store.size': string;
   'pri.store.size': string;
   'dataset.size': string;
+  metadata?: {
+    title: string;
+    description: string;
+    icon: string;
+    createdBy?: string;
+    createdAt?: string;
+  };
 }
 
 interface FilterValues {
@@ -43,7 +75,33 @@ interface SearchFilters {
   [key: string]: string | number | boolean;
 }
 
+// Icon mapping function
+const getIconComponent = (iconName: string) => {
+  const iconMap: { [key: string]: React.ComponentType<any> } = {
+    Database,
+    BarChart3,
+    TrendingUp,
+    Users,
+    Package,
+    MapPin,
+    Calendar,
+    FileText,
+    ShoppingCart,
+    Globe,
+    Heart,
+    Car,
+    Home,
+    Briefcase,
+    Book
+  };
+  
+  return iconMap[iconName] || Database;
+};
+
 const Search: React.FC = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
+  const isAdmin = user?.role === 'admin';
+  
   const [selectedIndex, setSelectedIndex] = useState<string>('');
   const [indices, setIndices] = useState<IndexInfo[]>([]);
   const [indexFields, setIndexFields] = useState<FieldInfo[]>([]);
@@ -360,6 +418,11 @@ const Search: React.FC = () => {
     setError(null);
   };
 
+  // Admin management functions
+  const goToIndexManagement = () => {
+    window.location.href = '/admin/elasticsearch';
+  };
+
   const renderFilterInput = (field: FieldInfo) => {
     const value = filters[field.name] || '';
     
@@ -533,35 +596,61 @@ const Search: React.FC = () => {
       {/* Index Selection */}
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="space-y-4">
-          <div className="flex items-center space-x-2 mb-4">
-            <Database className="h-5 w-5 text-indigo-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Select Index</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <Database className="h-5 w-5 text-indigo-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Select Index</h3>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={goToIndexManagement}
+                className="flex items-center px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Manage Indexes
+              </button>
+            )}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {indices.map((index) => (
-              <div
-                key={index.index}
-                onClick={() => setSelectedIndex(index.index)}
-                className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                  selectedIndex === index.index
-                    ? 'border-indigo-500 bg-indigo-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-gray-900">{index.index}</h4>
-                  {selectedIndex === index.index && (
-                    <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                  )}
+            {indices.map((index) => {
+              const IconComponent = getIconComponent(index.metadata?.icon || 'Database');
+              return (
+                <div
+                  key={index.index}
+                  onClick={() => setSelectedIndex(index.index)}
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                    selectedIndex === index.index
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0">
+                      <IconComponent className="h-8 w-8 text-indigo-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-gray-900 truncate">
+                          {index.metadata?.title || index.index}
+                        </h4>
+                        {selectedIndex === index.index && (
+                          <div className="w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0"></div>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm text-gray-600 line-clamp-2">
+                        {index.metadata?.description || 'No description available'}
+                      </p>
+                      <div className="mt-2 text-xs text-gray-500 space-y-1">
+                        <p>{parseInt(index['docs.count'] || '0').toLocaleString()} documents</p>
+                        <p>{index['store.size'] || 'Unknown'} storage</p>
+                        <p>Status: {index.status}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-2 text-sm text-gray-500">
-                  <p>{parseInt(index['docs.count'] || '0').toLocaleString()} documents</p>
-                  <p>{index['store.size'] || 'Unknown'}</p>
-                  <p className="text-xs">Status: {index.status}</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -892,7 +981,7 @@ const Search: React.FC = () => {
           <Database className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Select an index to search</h3>
           <p className="mt-1 text-sm text-gray-500">
-            Choose an index from the list above to start searching.
+            Choose an index from the list above to start searching. Each index contains different types of data.
           </p>
         </div>
       )}

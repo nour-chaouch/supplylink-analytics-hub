@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../services/api';
 import DataImportWizard from '../components/DataImportWizard';
 import IndexCreationForm from '../components/IndexCreationForm';
+import IndexMetadataEditForm from '../components/IndexMetadataEditForm';
+import DeleteConfirmation from '../components/DeleteConfirmation';
 import { 
   Database, 
   Plus, 
@@ -44,6 +46,14 @@ interface IndexInfo {
   creationDate?: string | null;
   mappingFields?: number;
   error?: string;
+  // Index metadata
+  metadata?: {
+    title: string;
+    description: string;
+    icon: string;
+    createdBy?: string;
+    createdAt?: string;
+  };
 }
 
 interface ClusterHealth {
@@ -70,6 +80,15 @@ const ElasticsearchAdmin = () => {
   // Data management state
   const [dataManagementOpen, setDataManagementOpen] = useState(false);
   const [selectedIndexForDataManagement, setSelectedIndexForDataManagement] = useState<string>('');
+
+  // Index metadata management state
+  const [metadataEditOpen, setMetadataEditOpen] = useState(false);
+  const [selectedIndexForMetadataEdit, setSelectedIndexForMetadataEdit] = useState<string>('');
+
+  // Delete confirmation state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [indexToDelete, setIndexToDelete] = useState<string>('');
+  const [deleting, setDeleting] = useState(false);
 
   // Load cluster health and indices
   const loadElasticsearchData = async () => {
@@ -100,31 +119,31 @@ const ElasticsearchAdmin = () => {
     loadElasticsearchData();
   };
 
-  // Delete index
-  const deleteIndex = async (indexName: string) => {
-    if (!window.confirm(`Are you sure you want to delete index "${indexName}"?`)) {
-      return;
-    }
+  // Delete index (replaced with confirmation dialog)
+  // const deleteIndex = async (indexName: string) => {
+  //   if (!window.confirm(`Are you sure you want to delete index "${indexName}"?`)) {
+  //     return;
+  //   }
 
-    setLoading(true);
-    setError(null);
+  //   setLoading(true);
+  //   setError(null);
     
-    try {
-      const response = await adminAPI.deleteElasticsearchIndex(indexName);
-      const data = response.data;
+  //   try {
+  //     const response = await adminAPI.deleteElasticsearchIndex(indexName);
+  //     const data = response.data;
       
-      if (data.success) {
-        setSuccess(data.message);
-        loadElasticsearchData();
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      setError('Failed to delete index');
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     if (data.success) {
+  //       setSuccess(data.message);
+  //       loadElasticsearchData();
+  //     } else {
+  //       setError(data.message);
+  //     }
+  //   } catch (err) {
+  //     setError('Failed to delete index');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
 
   // Open import wizard for specific index
@@ -154,6 +173,49 @@ const ElasticsearchAdmin = () => {
   const closeDataManagement = () => {
     setDataManagementOpen(false);
     setSelectedIndexForDataManagement('');
+  };
+
+  // Index metadata management functions
+  const openMetadataEdit = (indexName: string) => {
+    setSelectedIndexForMetadataEdit(indexName);
+    setMetadataEditOpen(true);
+  };
+
+  const closeMetadataEdit = () => {
+    setMetadataEditOpen(false);
+    setSelectedIndexForMetadataEdit('');
+  };
+
+  const handleMetadataEditSuccess = () => {
+    loadElasticsearchData(); // Reload data to get updated metadata
+  };
+
+  // Delete confirmation functions
+  const confirmDeleteIndex = (indexName: string) => {
+    setIndexToDelete(indexName);
+    setDeleteConfirmOpen(true);
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmOpen(false);
+    setIndexToDelete('');
+  };
+
+  const executeDelete = async () => {
+    if (!indexToDelete) return;
+    
+    setDeleting(true);
+    try {
+      await adminAPI.deleteElasticsearchIndex(indexToDelete);
+      setSuccess(`Index '${indexToDelete}' deleted successfully`);
+      loadElasticsearchData();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to delete index');
+    } finally {
+      setDeleting(false);
+      setDeleteConfirmOpen(false);
+      setIndexToDelete('');
+    }
   };
 
   useEffect(() => {
@@ -293,12 +355,17 @@ const ElasticsearchAdmin = () => {
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-2">
-                    <h3 className="font-semibold text-lg">{index.index}</h3>
+                    <h3 className="font-semibold text-lg">
+                      {index.metadata?.title || index.index}
+                    </h3>
                     <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(index.status)}`}>
                       {index.status}
                     </span>
                     <div className={`w-2 h-2 rounded-full ${getHealthColor(index.health)}`}></div>
                   </div>
+                  {index.metadata?.description && (
+                    <p className="text-sm text-gray-600 mb-2">{index.metadata.description}</p>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-2">
                     <div>
                       <span className="font-medium">Documents:</span> {
@@ -368,10 +435,19 @@ const ElasticsearchAdmin = () => {
                     <Eye className="h-4 w-4 mr-1" />
                     Manage Data
                   </button>
+                  
+                  {/* Metadata Edit Button */}
+                  <button
+                    onClick={() => openMetadataEdit(index.index)}
+                    className="flex items-center px-3 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                  >
+                    <Edit className="h-4 w-4 mr-1" />
+                    Edit Metadata
+                  </button>
                     
                     <button
-                      onClick={() => deleteIndex(index.index)}
-                      disabled={loading}
+                      onClick={() => confirmDeleteIndex(index.index)}
+                      disabled={loading || deleting}
                       className="p-2 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -412,6 +488,25 @@ const ElasticsearchAdmin = () => {
         isOpen={showIndexCreationForm}
         onClose={() => setShowIndexCreationForm(false)}
         onSuccess={handleIndexCreationSuccess}
+      />
+
+      {/* Index Metadata Edit Form */}
+      <IndexMetadataEditForm
+        isOpen={metadataEditOpen}
+        onClose={closeMetadataEdit}
+        onSuccess={handleMetadataEditSuccess}
+        indexName={selectedIndexForMetadataEdit}
+      />
+
+      {/* Delete Confirmation */}
+      <DeleteConfirmation
+        isOpen={deleteConfirmOpen}
+        onClose={cancelDelete}
+        onConfirm={executeDelete}
+        title="Delete Index"
+        message={`Are you sure you want to delete the index "${indexToDelete}"?`}
+        itemName={`Index "${indexToDelete}"`}
+        loading={deleting}
       />
     </div>
   );
