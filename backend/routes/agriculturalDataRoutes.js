@@ -505,48 +505,234 @@ router.get('/indices/:indexName/search', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Index not found' });
     }
     
+    // Get index mapping to determine searchable fields
+    const mapping = await client.indices.getMapping({ index: indexName });
+    const properties = mapping[indexName].mappings.properties;
+    
+    // Extract searchable fields (text and keyword fields)
+    const searchableFields = Object.keys(properties).filter(fieldName => {
+      const field = properties[fieldName];
+      const fieldType = field.type;
+      return fieldType === 'text' || fieldType === 'keyword';
+    });
+    
     // Build search query dynamically
     const mustQueries = [];
+    const shouldQueries = [];
     
-    // Add text search if query provided
+    // Add intelligent text search if query provided
     if (query && query.trim()) {
-      mustQueries.push({
-        multi_match: {
-          query: query.trim(),
-          fields: ['*'], // Search in all fields
-          type: 'best_fields',
-          fuzziness: 'AUTO'
+      const searchTerm = query.trim();
+      
+      // Multiple search strategies - all in shouldQueries for maximum flexibility
+      
+      // 1. Primary wildcard search strategy - most flexible
+      if (searchableFields.length > 0) {
+        shouldQueries.push({
+          query_string: {
+            query: `*${searchTerm}*`,
+            fields: searchableFields,
+            default_operator: 'OR',
+            analyze_wildcard: true,
+            boost: 5.0,
+            lenient: true,
+            minimum_should_match: 1
+          }
+        });
+      }
+      
+      // 2. Exact match in keyword fields (highest priority)
+      searchableFields.forEach(fieldName => {
+        const field = properties[fieldName];
+        if (field.type === 'keyword') {
+          shouldQueries.push({
+            term: {
+              [fieldName]: {
+                value: searchTerm,
+                case_insensitive: true,
+                boost: 10.0
+              }
+            }
+          });
+        }
+      });
+      
+      // 3. Wildcard search for partial matches in keyword fields
+      searchableFields.forEach(fieldName => {
+        const field = properties[fieldName];
+        if (field.type === 'keyword') {
+          shouldQueries.push({
+            wildcard: {
+              [fieldName]: {
+                value: `*${searchTerm.toLowerCase()}*`,
+                case_insensitive: true,
+                boost: 8.0
+              }
+            }
+          });
+        }
+      });
+      
+      // 4. Regexp search for even more flexible matching
+      searchableFields.forEach(fieldName => {
+        const field = properties[fieldName];
+        if (field.type === 'keyword') {
+          shouldQueries.push({
+            regexp: {
+              [fieldName]: {
+                value: `.*${searchTerm.toLowerCase()}.*`,
+                case_insensitive: true,
+                boost: 6.0
+              }
+            }
+          });
+        }
+      });
+      
+      // 5. Multi-match for text fields with fuzziness
+      if (searchableFields.length > 0) {
+        shouldQueries.push({
+          multi_match: {
+            query: searchTerm,
+            fields: searchableFields.map(field => `${field}^2`),
+            type: 'best_fields',
+            fuzziness: 'AUTO',
+            operator: 'or',
+            boost: 4.0
+          }
+        });
+      }
+      
+      // 6. Prefix match for better autocomplete-like behavior
+      searchableFields.forEach(fieldName => {
+        const field = properties[fieldName];
+        if (field.type === 'keyword') {
+          shouldQueries.push({
+            prefix: {
+              [fieldName]: {
+                value: searchTerm.toLowerCase(),
+                case_insensitive: true,
+                boost: 3.0
+              }
+            }
+          });
+        }
+      });
+      
+      // 7. Fuzzy search for typos and variations
+      searchableFields.forEach(fieldName => {
+        const field = properties[fieldName];
+        if (field.type === 'keyword') {
+          shouldQueries.push({
+            fuzzy: {
+              [fieldName]: {
+                value: searchTerm.toLowerCase(),
+                fuzziness: 'AUTO',
+                boost: 2.0
+              }
+            }
+          });
         }
       });
     }
     
-    // Add filters
+    // Add filters with proper field type handling
     Object.keys(filters).forEach(filterKey => {
       if (filters[filterKey] && filters[filterKey].trim()) {
-        mustQueries.push({
-          term: {
-            [filterKey]: filters[filterKey]
+        const field = properties[filterKey];
+        const filterValue = filters[filterKey].trim();
+        
+        if (field) {
+          if (field.type === 'keyword' || field.type === 'text') {
+            mustQueries.push({
+              term: {
+                [filterKey]: {
+                  value: filterValue,
+                  case_insensitive: true
+                }
+              }
+            });
+          } else if (field.type === 'integer' || field.type === 'long') {
+            const numericValue = parseInt(filterValue);
+            if (!isNaN(numericValue)) {
+              mustQueries.push({
+                term: {
+                  [filterKey]: numericValue
+                }
+              });
+            }
+          } else if (field.type === 'float' || field.type === 'double') {
+            const numericValue = parseFloat(filterValue);
+            if (!isNaN(numericValue)) {
+              mustQueries.push({
+                term: {
+                  [filterKey]: numericValue
+                }
+              });
+            }
+          } else if (field.type === 'date') {
+            mustQueries.push({
+              term: {
+                [filterKey]: filterValue
+              }
+            });
           }
-        });
+        }
       }
     });
     
-    const searchQuery = mustQueries.length > 0 ? { bool: { must: mustQueries } } : { match_all: {} };
+    // Combine queries with ultra-flexible scoring for maximum search coverage
+    let searchQuery;
+    if (mustQueries.length > 0 || shouldQueries.length > 0) {
+      if (shouldQueries.length > 0 && mustQueries.length === 0) {
+        // If only should queries, use them directly with minimum_should_match
+        searchQuery = {
+          bool: {
+            should: shouldQueries,
+            minimum_should_match: 1 // At least one should query must match
+          }
+        };
+      } else {
+        // If we have must queries, combine them
+        searchQuery = {
+          bool: {
+            must: mustQueries,
+            should: shouldQueries,
+            minimum_should_match: 0 // Allow any should query to match for maximum flexibility
+          }
+        };
+      }
+    } else {
+      searchQuery = { match_all: {} };
+    }
     
-    // Perform search
+    // Perform search with intelligent sorting
     const response = await client.search({
       index: indexName,
       body: {
         query: searchQuery,
-        sort: [{ createdAt: { order: 'desc' } }],
+        sort: query && query.trim() ? 
+          [{ _score: { order: 'desc' } }] : // Sort by relevance when searching
+          [{ createdAt: { order: 'desc' } }], // Sort by date when browsing
         from: (page - 1) * limit,
-        size: parseInt(limit)
+        size: parseInt(limit),
+        highlight: query && query.trim() ? {
+          fields: searchableFields.reduce((acc, field) => {
+            acc[field] = {
+              fragment_size: 150,
+              number_of_fragments: 3
+            };
+            return acc;
+          }, {})
+        } : undefined
       }
     });
     
     const results = response.hits.hits.map(hit => ({
       _id: hit._id,
-      ...hit._source
+      ...hit._source,
+      _score: hit._score,
+      _highlights: hit.highlight || {}
     }));
     
     res.json({
@@ -557,6 +743,91 @@ router.get('/indices/:indexName/search', async (req, res) => {
         limit: parseInt(limit),
         total: response.hits.total.value,
         pages: Math.ceil(response.hits.total.value / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Get search suggestions for autocomplete
+router.get('/indices/:indexName/suggestions', async (req, res) => {
+  try {
+    const { indexName } = req.params;
+    const { q: query, limit = 10 } = req.query;
+    
+    if (!query || query.trim().length < 2) {
+      return res.json({
+        success: true,
+        data: {
+          suggestions: [],
+          total: 0
+        }
+      });
+    }
+    
+    const { producerPriceService, cropsLivestockService } = getServices();
+    const client = producerPriceService.client || cropsLivestockService.client;
+    
+    if (!client) {
+      return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
+    }
+    
+    // Check if index exists
+    const indexExists = await client.indices.exists({ index: indexName });
+    if (!indexExists) {
+      return res.status(404).json({ success: false, message: 'Index not found' });
+    }
+    
+    // Get mapping to determine searchable fields
+    const mapping = await client.indices.getMapping({ index: indexName });
+    const properties = mapping[indexName].mappings.properties;
+    
+    // Extract searchable fields (text and keyword fields)
+    const searchableFields = Object.keys(properties).filter(fieldName => {
+      const field = properties[fieldName];
+      const fieldType = field.type;
+      return fieldType === 'text' || fieldType === 'keyword';
+    });
+    
+    if (searchableFields.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          suggestions: [],
+          total: 0
+        }
+      });
+    }
+    
+    // Get suggestions from Elasticsearch
+    const response = await client.search({
+      index: indexName,
+      body: {
+        size: 0,
+        aggs: {
+          suggestions: {
+            terms: {
+              field: searchableFields[0], // Use first searchable field
+              size: parseInt(limit)
+            }
+          }
+        }
+      }
+    });
+    
+    const suggestions = response.aggregations.suggestions.buckets.map(bucket => ({
+      text: bucket.key,
+      count: bucket.doc_count,
+      field: searchableFields[0]
+    }));
+    
+    res.json({
+      success: true,
+      data: {
+        suggestions,
+        total: suggestions.length,
+        query: query.trim()
       }
     });
   } catch (error) {

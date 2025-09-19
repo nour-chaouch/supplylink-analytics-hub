@@ -78,6 +78,8 @@ interface SearchFilters {
 
 interface SearchResult {
   _id: string;
+  _score?: number;
+  _highlights?: { [key: string]: string[] };
   [key: string]: any;
 }
 
@@ -346,7 +348,13 @@ const Search: React.FC = () => {
 
   const formatFileSize = (size: string) => {
     if (!size) return 'Unknown';
-    // Convert bytes to human readable format
+    
+    // If size is already formatted (like "365.1mb"), return as is
+    if (typeof size === 'string' && size.match(/^\d+(\.\d+)?[kmgt]?b$/i)) {
+      return size.toUpperCase();
+    }
+    
+    // If size is in bytes, convert to human readable format
     const bytes = parseInt(size);
     if (isNaN(bytes)) return size;
     
@@ -354,6 +362,30 @@ const Search: React.FC = () => {
     if (bytes === 0) return '0 B';
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const renderHighlightedText = (text: string, highlights?: string[]) => {
+    if (!highlights || highlights.length === 0) {
+      return text;
+    }
+    
+    // Combine all highlight fragments
+    const combinedHighlights = highlights.join(' ... ');
+    
+    return (
+      <span dangerouslySetInnerHTML={{ __html: combinedHighlights }} />
+    );
+  };
+
+  const getFieldValue = (result: SearchResult, fieldName: string) => {
+    const value = result[fieldName];
+    const highlights = result._highlights?.[fieldName];
+    
+    if (highlights && highlights.length > 0) {
+      return renderHighlightedText(String(value), highlights);
+    }
+    
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
   };
 
   return (
@@ -482,18 +514,7 @@ const Search: React.FC = () => {
             </div>
           )}
           
-          {/* Selected Index Info */}
-          {selectedIndex && (
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-2 mb-2">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <span className="text-sm font-medium text-gray-900">Selected Index</span>
-              </div>
-              <p className="text-sm text-gray-600">
-                {indices.find(i => i.name === selectedIndex)?.description}
-              </p>
-            </div>
-          )}
+        
         </div>
       </div>
 
@@ -728,15 +749,29 @@ const Search: React.FC = () => {
 
                     {/* Result Details */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-                      {Object.keys(result).map((key) => (
+                      {Object.keys(result).filter(key => !key.startsWith('_')).map((key) => (
                         <div key={key} className="break-words">
                           <span className="font-medium text-gray-700">{key}:</span>
                           <span className="ml-2 text-gray-900">
-                            {typeof result[key] === 'object' ? JSON.stringify(result[key]) : String(result[key])}
+                            {getFieldValue(result, key)}
                           </span>
                         </div>
                       ))}
                     </div>
+                    
+                    {/* Search Score and Highlights */}
+                    {result._score && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <div className="flex items-center space-x-4">
+                            <span>Relevance Score: {result._score.toFixed(2)}</span>
+                            {result._highlights && Object.keys(result._highlights).length > 0 && (
+                              <span>Found in: {Object.keys(result._highlights).join(', ')}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -785,6 +820,86 @@ const Search: React.FC = () => {
                   >
                     Previous
                   </button>
+                  
+                  {/* Page Numbers */}
+                  {(() => {
+                    const totalPages = Math.ceil(totalResults / pageSize);
+                    const maxVisiblePages = 7;
+                    const halfVisible = Math.floor(maxVisiblePages / 2);
+                    
+                    let startPage = Math.max(1, currentPage - halfVisible);
+                    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                    
+                    // Adjust start page if we're near the end
+                    if (endPage - startPage + 1 < maxVisiblePages) {
+                      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                    }
+                    
+                    const pages = [];
+                    
+                    // Add first page and ellipsis if needed
+                    if (startPage > 1) {
+                      pages.push(
+                        <button
+                          key={1}
+                          onClick={() => handlePageChange(1)}
+                          disabled={loading}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          1
+                        </button>
+                      );
+                      if (startPage > 2) {
+                        pages.push(
+                          <span key="ellipsis1" className="px-2 py-1 text-sm text-gray-500">
+                            ...
+                          </span>
+                        );
+                      }
+                    }
+                    
+                    // Add visible page numbers
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(
+                        <button
+                          key={i}
+                          onClick={() => handlePageChange(i)}
+                          disabled={loading}
+                          className={`px-3 py-1 text-sm border rounded ${
+                            i === currentPage
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'border-gray-300 hover:bg-gray-50'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {i}
+                        </button>
+                      );
+                    }
+                    
+                    // Add last page and ellipsis if needed
+                    if (endPage < totalPages) {
+                      if (endPage < totalPages - 1) {
+                        pages.push(
+                          <span key="ellipsis2" className="px-2 py-1 text-sm text-gray-500">
+                            ...
+                          </span>
+                        );
+                      }
+                      pages.push(
+                        <button
+                          key={totalPages}
+                          onClick={() => handlePageChange(totalPages)}
+                          disabled={loading}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {totalPages}
+                        </button>
+                      );
+                    }
+                    
+                    return pages;
+                  })()}
+                  
                   <button
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage >= Math.ceil(totalResults / pageSize) || loading}

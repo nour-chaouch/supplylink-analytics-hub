@@ -337,6 +337,9 @@ export const agriculturalAPI = {
 
   searchIndex: (indexName: string, params = {}) => 
     api.get(`/agricultural/indices/${indexName}/search`, { params }),
+
+  getSearchSuggestions: (indexName: string, query: string, limit = 10) => 
+    api.get(`/agricultural/indices/${indexName}/suggestions`, { params: { q: query, limit } }),
 };
 
 // Health check
