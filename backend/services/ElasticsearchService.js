@@ -165,6 +165,13 @@ class ElasticsearchService {
         throw new Error('Elasticsearch client not initialized');
       }
 
+      // Check if index exists first
+      const indexExists = await this.client.indices.exists({ index: this.indexName });
+      if (!indexExists) {
+        console.log(`Index ${this.indexName} does not exist, returning empty search results`);
+        return [];
+      }
+
       const mustQueries = [];
 
       // Add text search if searchTerm provided

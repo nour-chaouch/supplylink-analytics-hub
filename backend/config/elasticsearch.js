@@ -2,15 +2,22 @@ const { Client } = require('@elastic/elasticsearch');
 
 // Create Elasticsearch client
 const createElasticsearchClient = () => {
+  const elasticsearchUrl = process.env.ELASTICSEARCH_URL || 'http://localhost:9200';
+  console.log(`Creating Elasticsearch client for: ${elasticsearchUrl}`);
+  
   const client = new Client({
-    node: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
+    node: elasticsearchUrl,
     auth: process.env.ELASTICSEARCH_AUTH ? {
       username: process.env.ELASTICSEARCH_USERNAME,
       password: process.env.ELASTICSEARCH_PASSWORD
     } : undefined,
     requestTimeout: 30000,
     maxRetries: 3,
-    resurrectStrategy: 'ping'
+    resurrectStrategy: 'ping',
+    // Add connection timeout
+    connectionTimeout: 10000,
+    // Add ping timeout
+    pingTimeout: 5000
   });
 
   return client;
@@ -20,7 +27,19 @@ const createElasticsearchClient = () => {
 const testElasticsearchConnection = async () => {
   try {
     const client = createElasticsearchClient();
-    const response = await client.ping();
+    console.log('Testing Elasticsearch connection...');
+    
+    // Try ping first
+    try {
+      await client.ping();
+      console.log('✅ Elasticsearch ping successful');
+    } catch (pingError) {
+      console.log('⚠️  Ping failed, trying cluster health...');
+      // If ping fails, try cluster health as fallback
+      await client.cluster.health();
+      console.log('✅ Elasticsearch cluster health check successful');
+    }
+    
     console.log('✅ Elasticsearch Connected Successfully');
     return client;
   } catch (error) {
@@ -34,7 +53,15 @@ const testElasticsearchConnection = async () => {
 let elasticsearchClient = null;
 
 const initializeElasticsearch = async () => {
+  console.log('Initializing Elasticsearch client...');
   elasticsearchClient = await testElasticsearchConnection();
+  
+  if (elasticsearchClient) {
+    console.log('✅ Elasticsearch client initialized successfully');
+  } else {
+    console.log('❌ Elasticsearch client initialization failed');
+  }
+  
   return elasticsearchClient;
 };
 

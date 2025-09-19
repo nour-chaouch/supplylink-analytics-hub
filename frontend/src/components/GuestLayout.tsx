@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store/store';
 import { logout } from '../store/slices/authSlice';
+import { useSystemSettings, defaultSystemSettings } from '../contexts/SystemSettingsContext';
 import { 
   BarChart3, 
   Search, 
@@ -21,6 +22,9 @@ const GuestLayout: React.FC = () => {
   const location = useLocation();
   const dispatch = useDispatch<AppDispatch>();
   const { user, isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const { settings } = useSystemSettings();
+  
+  const siteName = settings?.siteName || defaultSystemSettings.siteName;
 
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
@@ -46,7 +50,7 @@ const GuestLayout: React.FC = () => {
               {/* Logo */}
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/" className="text-2xl font-bold text-indigo-600">
-                  SupplyLink
+                  {siteName}
                 </Link>
               </div>
 

@@ -4,8 +4,8 @@
   "description": "SupplyLink Analytics Hub Backend",
   "main": "server.js",
   "scripts": {
-    "start": "nodemon server.js",
-    "dev": "nodemon server.js",
+    "start": "nodemon",
+    "dev": "nodemon",
     "install-deps": "npm install",
     "create-admin": "node scripts/createAdmin.js",
     "test-jwt": "node scripts/testJWT.js",

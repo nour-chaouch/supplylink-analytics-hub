@@ -45,3 +45,4 @@ indexMetadataSchema.pre('save', function(next) {
 });
 
 module.exports = mongoose.model('IndexMetadata', indexMetadataSchema);
+

@@ -268,3 +268,4 @@ const IndexMetadataEditForm: React.FC<IndexMetadataEditFormProps> = ({
 };
 
 export default IndexMetadataEditForm;
+

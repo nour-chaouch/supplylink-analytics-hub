@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { adminAPI } from '../services/api';
+import { agriculturalAPI } from '../services/api';
 import { 
   Search as SearchIcon, 
   Filter, 
@@ -23,231 +23,170 @@ import {
   Briefcase,
   Book,
   Edit,
-  Settings
+  Settings,
+  DollarSign,
+  Leaf,
+  ChevronRight,
+  Tag,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  HardDrive,
+  User,
+  Activity,
+  Zap,
+  Shield,
+  Star,
+  Info
 } from 'lucide-react';
 import { RootState } from '../store/store';
 
-interface IndexInfo {
+interface Index {
+  name: string;
+  displayName: string;
+  description: string;
+  icon: string;
+  documentCount: number;
+  status: 'available' | 'not_available';
   health: string;
-  status: string;
-  index: string;
-  uuid: string;
-  pri: string;
-  rep: string;
-  'docs.count': string;
-  'docs.deleted': string;
-  'store.size': string;
-  'pri.store.size': string;
-  'dataset.size': string;
-  metadata?: {
-    title: string;
-    description: string;
-    icon: string;
-    createdBy?: string;
-    createdAt?: string;
-  };
+  size: string;
+  lastModified: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: {
+    username: string;
+    email: string;
+  } | null;
+  hasMetadata: boolean;
 }
 
-interface FilterValues {
-  fieldName: string;
-  fieldType: string;
-  values: Array<{
-    value: string;
-    count: number;
-  }>;
-  totalDocuments: number;
-}
-
-interface FieldInfo {
+interface Field {
   name: string;
   type: string;
-  description: string;
-  example: string;
-  required: boolean;
-  inputType?: string;
-  validation?: {
-    maxLength?: number;
-    step?: number;
-  };
+  displayName: string;
+  searchable: boolean;
+}
+
+interface FilterValue {
+  value: string;
+  count: number;
 }
 
 interface SearchFilters {
-  [key: string]: string | number | boolean;
+  [key: string]: string;
 }
 
-// Icon mapping function
-const getIconComponent = (iconName: string) => {
-  const iconMap: { [key: string]: React.ComponentType<any> } = {
-    Database,
-    BarChart3,
-    TrendingUp,
-    Users,
-    Package,
-    MapPin,
-    Calendar,
-    FileText,
-    ShoppingCart,
-    Globe,
-    Heart,
-    Car,
-    Home,
-    Briefcase,
-    Book
-  };
-  
-  return iconMap[iconName] || Database;
-};
+interface SearchResult {
+  _id: string;
+  [key: string]: any;
+}
 
 const Search: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
   const isAdmin = user?.role === 'admin';
   
   const [selectedIndex, setSelectedIndex] = useState<string>('');
-  const [indices, setIndices] = useState<IndexInfo[]>([]);
-  const [indexFields, setIndexFields] = useState<FieldInfo[]>([]);
-  const [filterValues, setFilterValues] = useState<FilterValues[]>([]);
+  const [indices, setIndices] = useState<Index[]>([]);
+  const [fields, setFields] = useState<Field[]>([]);
+  const [filterValues, setFilterValues] = useState<{[key: string]: FilterValue[]}>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({});
-  const [sortField, setSortField] = useState('_score');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalResults, setTotalResults] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [showFilters, setShowFilters] = useState(false);
+  const [showAllFilters, setShowAllFilters] = useState(false);
 
-  // Load indices on component mount
+  // Load available indices on component mount
   useEffect(() => {
     loadIndices();
   }, []);
 
-  // Load index fields when index is selected
+  // Load fields and filter values when index changes
   useEffect(() => {
     if (selectedIndex) {
-      loadIndexFields(selectedIndex);
-      loadFilterValues(selectedIndex);
-    } else {
-      setIndexFields([]);
-      setFilterValues([]);
+      loadFields(selectedIndex);
+      loadAllFilterValues(selectedIndex);
       setFilters({});
+      setResults([]);
+      setTotalResults(0);
+      setShowAllFilters(false); // Reset filter expansion
     }
   }, [selectedIndex]);
 
-  // Debug summary when both indexFields and filterValues are loaded
-  useEffect(() => {
-    if (indexFields.length > 0 && filterValues.length > 0) {
-      console.log('\n🎯 SUMMARY - Both indexFields and filterValues loaded:');
-      console.log('Index fields count:', indexFields.length);
-      console.log('Filter values count:', filterValues.length);
-      
-      // Check which fields should have select lists
-      const fieldsWithSelectLists = indexFields.filter(field => {
-        const fieldFilterValues = filterValues.find(fv => fv.fieldName === field.name);
-        return (field.type === 'keyword' || field.type === 'text') && 
-               fieldFilterValues && 
-               fieldFilterValues.values.length > 0 && 
-               fieldFilterValues.values.length <= 200; // Updated limit
-      });
-      
-      console.log('Fields that should render as select lists:', fieldsWithSelectLists.map(f => f.name));
-      
-      // Check which fields have filter values but won't render as select lists
-      const fieldsWithFilterValuesButNoSelect = indexFields.filter(field => {
-        const fieldFilterValues = filterValues.find(fv => fv.fieldName === field.name);
-        const shouldHaveSelect = (field.type === 'keyword' || field.type === 'text') && 
-                               fieldFilterValues && 
-                               fieldFilterValues.values.length > 0 && 
-                               fieldFilterValues.values.length <= 200; // Updated limit
-        return fieldFilterValues && !shouldHaveSelect;
-      });
-      
-      if (fieldsWithFilterValuesButNoSelect.length > 0) {
-        console.log('⚠️ Fields with filter values but NO select list:', fieldsWithFilterValuesButNoSelect.map(f => ({
-          name: f.name,
-          type: f.type,
-          inputType: f.inputType,
-          filterValuesCount: filterValues.find(fv => fv.fieldName === f.name)?.values.length
-        })));
-      }
-    }
-  }, [indexFields, filterValues]);
-
   const loadIndices = async () => {
     try {
-      const response = await adminAPI.getElasticsearchIndices();
+      const response = await agriculturalAPI.getIndices();
       if (response.data.success) {
         setIndices(response.data.data);
+        // Auto-select first available index
+        const availableIndex = response.data.data.find((index: Index) => index.status === 'available');
+        if (availableIndex) {
+          setSelectedIndex(availableIndex.name);
+        }
       }
     } catch (err) {
       console.error('Failed to load indices:', err);
+      setError('Failed to load available indices');
     }
   };
 
-  const loadIndexFields = async (indexName: string) => {
+  const loadFields = async (indexName: string) => {
     try {
-      console.log('\n📋 LOADING INDEX FIELDS for index:', indexName);
-      const response = await adminAPI.getIndexSchema(indexName);
-      console.log('Index schema API response:', response.data);
-      
+      const response = await agriculturalAPI.getIndexFields(indexName);
       if (response.data.success) {
-        setIndexFields(response.data.data.fields);
-        console.log('✅ Index fields loaded successfully:', response.data.data.fields.length, 'fields');
-        
-        // Log details for each field
-        response.data.data.fields.forEach((field: FieldInfo, index: number) => {
-          console.log(`Field ${index + 1}:`, {
-            name: field.name,
-            type: field.type,
-            inputType: field.inputType,
-            required: field.required
-          });
-        });
-        
-        // Reset filters when changing index
-        setFilters({});
-      } else {
-        console.error('❌ Index schema API failed:', response.data);
+        setFields(response.data.data.filterableFields);
       }
     } catch (err) {
-      console.error('❌ Failed to load index fields:', err);
-      setError('Failed to load index schema');
+      console.error('Failed to load fields:', err);
+      setError('Failed to load index fields');
     }
   };
 
-  const loadFilterValues = async (indexName: string) => {
+  const loadAllFilterValues = async (indexName: string) => {
     try {
-      console.log('\n🔍 LOADING FILTER VALUES for index:', indexName);
-      const response = await adminAPI.getFilterValues(indexName);
-      console.log('Filter values API response:', response.data);
-      
+      const response = await agriculturalAPI.getAllIndexFilterValues(indexName);
       if (response.data.success) {
-        setFilterValues(response.data.data);
-        console.log('✅ Filter values loaded successfully:', response.data.data.length, 'fields');
-        
-        // Log details for each filter value
-        response.data.data.forEach((fv: FilterValues, index: number) => {
-          console.log(`Filter Value ${index + 1}:`, {
-            fieldName: fv.fieldName,
-            fieldType: fv.fieldType,
-            valuesCount: fv.values.length,
-            totalDocuments: fv.totalDocuments,
-            firstFewValues: fv.values.slice(0, 3).map((v: {value: string, count: number}) => `${v.value}(${v.count})`)
-          });
+        const allFilterValues: {[key: string]: FilterValue[]} = {};
+        Object.keys(response.data.data.filterValues).forEach(fieldName => {
+          allFilterValues[fieldName] = response.data.data.filterValues[fieldName].values;
         });
-      } else {
-        console.error('❌ Filter values API failed:', response.data);
+        setFilterValues(allFilterValues);
       }
     } catch (err) {
-      console.error('❌ Failed to load filter values:', err);
-      // Don't set error for filter values failure, it's not critical
+      console.error('Failed to load filter values:', err);
+      // If MongoDB doesn't have filter values, fall back to empty state
+      setFilterValues({});
+    }
+  };
+
+  const loadFilterValues = async (fieldName: string) => {
+    if (!selectedIndex || filterValues[fieldName]) return;
+    
+    try {
+      const response = await agriculturalAPI.getIndexFilterValues(selectedIndex, fieldName);
+      if (response.data.success) {
+        setFilterValues(prev => ({
+          ...prev,
+          [fieldName]: response.data.data.values
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to load filter values:', err);
     }
   };
 
   const handleSearch = async () => {
-    if (!selectedIndex || (!searchTerm.trim() && Object.keys(filters).length === 0)) {
-      setError('Please select an index and enter a search term or apply filters');
+    if (!selectedIndex) {
+      setError('Please select an index to search');
+      return;
+    }
+    
+    if (!searchTerm.trim() && Object.values(filters).every(v => !v)) {
+      setError('Please enter a search term or apply filters');
       return;
     }
     
@@ -258,30 +197,25 @@ const Search: React.FC = () => {
     try {
       const params: any = {
         page: 1,
-        size: pageSize,
-        sortField,
-        sortOrder
+        limit: pageSize
       };
 
       // Add search term if provided
       if (searchTerm.trim()) {
-        params.search = searchTerm.trim();
+        params.q = searchTerm.trim();
       }
 
       // Add filters
       Object.keys(filters).forEach(key => {
-        if (filters[key] !== '' && filters[key] !== null && filters[key] !== undefined) {
-          params[`filter.${key}`] = filters[key];
+        if (filters[key]) {
+          params[key] = filters[key];
         }
       });
 
-      const response = await adminAPI.getDocuments(selectedIndex, params);
-      console.log('Search response:', response.data);
+      const response = await agriculturalAPI.searchIndex(selectedIndex, params);
       if (response.data.success) {
-        console.log('Documents found:', response.data.data.documents.length);
-        console.log('First document:', response.data.data.documents[0]);
-        setResults(response.data.data.documents);
-        setTotalResults(response.data.data.total);
+        setResults(response.data.data);
+        setTotalResults(response.data.pagination.total);
       } else {
         setError(response.data.message || 'Search failed');
       }
@@ -293,7 +227,7 @@ const Search: React.FC = () => {
   };
 
   const handlePageChange = async (newPage: number) => {
-    if (!selectedIndex || newPage < 1) return;
+    if (newPage < 1) return;
     
     setLoading(true);
     setError(null);
@@ -302,27 +236,25 @@ const Search: React.FC = () => {
     try {
       const params: any = {
         page: newPage,
-        size: pageSize,
-        sortField,
-        sortOrder
+        limit: pageSize
       };
 
       // Add search term if provided
       if (searchTerm.trim()) {
-        params.search = searchTerm.trim();
+        params.q = searchTerm.trim();
       }
 
       // Add filters
       Object.keys(filters).forEach(key => {
-        if (filters[key] !== '' && filters[key] !== null && filters[key] !== undefined) {
-          params[`filter.${key}`] = filters[key];
+        if (filters[key]) {
+          params[key] = filters[key];
         }
       });
 
-      const response = await adminAPI.getDocuments(selectedIndex, params);
+      const response = await agriculturalAPI.searchIndex(selectedIndex, params);
       if (response.data.success) {
-        setResults(response.data.data.documents);
-        setTotalResults(response.data.data.total);
+        setResults(response.data.data);
+        setTotalResults(response.data.pagination.total);
       } else {
         setError(response.data.message || 'Page load failed');
       }
@@ -333,76 +265,10 @@ const Search: React.FC = () => {
     }
   };
 
-  const handlePageSizeChange = async (newPageSize: number) => {
-    if (!selectedIndex || newPageSize < 1) return;
-    
-    setLoading(true);
-    setError(null);
-    setPageSize(newPageSize);
-    setCurrentPage(1); // Reset to first page when changing page size
-    
-    try {
-      const params: any = {
-        page: 1,
-        size: newPageSize,
-        sortField,
-        sortOrder
-      };
-
-      // Add search term if provided
-      if (searchTerm.trim()) {
-        params.search = searchTerm.trim();
-      }
-
-      // Add filters
-      Object.keys(filters).forEach(key => {
-        if (filters[key] !== '' && filters[key] !== null && filters[key] !== undefined) {
-          params[`filter.${key}`] = filters[key];
-        }
-      });
-
-      const response = await adminAPI.getDocuments(selectedIndex, params);
-      if (response.data.success) {
-        setResults(response.data.data.documents);
-        setTotalResults(response.data.data.total);
-      } else {
-        setError(response.data.message || 'Page size change failed');
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Page size change failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFilterChange = (fieldName: string, value: string | number | boolean) => {
-    // Convert string values to appropriate types based on field type
-    let processedValue = value;
-    
-    if (typeof value === 'string') {
-      const field = indexFields.find(f => f.name === fieldName);
-      if (field) {
-        switch (field.type) {
-          case 'integer':
-          case 'long':
-            processedValue = value === '' ? '' : parseInt(value, 10);
-            break;
-          case 'float':
-          case 'double':
-            processedValue = value === '' ? '' : parseFloat(value);
-            break;
-          case 'boolean':
-            processedValue = value === 'true' ? true : value === 'false' ? false : '';
-            break;
-          default:
-            processedValue = value;
-        }
-      }
-    }
-    
+  const handleFilterChange = (fieldName: string, value: string) => {
     setFilters(prev => ({
       ...prev,
-      [fieldName]: processedValue
+      [fieldName]: value
     }));
   };
 
@@ -418,162 +284,76 @@ const Search: React.FC = () => {
     setError(null);
   };
 
-  // Admin management functions
-  const goToIndexManagement = () => {
-    window.location.href = '/admin/elasticsearch';
-  };
-
-  const renderFilterInput = (field: FieldInfo) => {
-    const value = filters[field.name] || '';
-    
-    // Check if we have filter values for this field
-    // Try exact match first, then case-insensitive match
-    let fieldFilterValues = filterValues.find(fv => fv.fieldName === field.name);
-    
-    if (!fieldFilterValues) {
-      // Try case-insensitive match
-      fieldFilterValues = filterValues.find(fv => 
-        fv.fieldName.toLowerCase() === field.name.toLowerCase()
-      );
-    }
-    
-    // Comprehensive debugging for all fields
-    console.log(`\n=== RENDERING FILTER FOR: ${field.name} ===`);
-    console.log('Field type:', field.type);
-    console.log('Field inputType:', field.inputType);
-    console.log('FieldFilterValues found:', !!fieldFilterValues);
-    
-    if (fieldFilterValues) {
-      console.log('FieldFilterValues details:', {
-        fieldName: fieldFilterValues.fieldName,
-        fieldType: fieldFilterValues.fieldType,
-        valuesCount: fieldFilterValues.values.length,
-        totalDocuments: fieldFilterValues.totalDocuments,
-        firstFewValues: fieldFilterValues.values.slice(0, 3)
-      });
-    } else {
-      console.log('No filter values found for field:', field.name);
-      console.log('Available filter field names:', filterValues.map(fv => fv.fieldName));
-    }
-    
-    // Check if this field should render as select list
-    const shouldRenderSelect = (field.type === 'keyword' || field.type === 'text') && 
-                              fieldFilterValues && 
-                              fieldFilterValues.values.length > 0 && 
-                              fieldFilterValues.values.length <= 200; // Increased from 50 to 200
-    
-    console.log('Should render as select list:', shouldRenderSelect);
-    console.log('Conditions check:', {
-      isKeywordOrText: field.type === 'keyword' || field.type === 'text',
-      hasFilterValues: !!fieldFilterValues,
-      hasValues: fieldFilterValues ? fieldFilterValues.values.length > 0 : false,
-      valuesCountOk: fieldFilterValues ? fieldFilterValues.values.length <= 200 : false // Updated limit
-    });
-
-    // For keyword and text fields, check if we have filter values first
-    if (shouldRenderSelect && fieldFilterValues) {
-      console.log(`✅ RENDERING SELECT LIST for ${field.name}`);
-      
-      return (
-        <div className="relative">
-          <select
-            value={String(value)}
-            onChange={(e) => handleFilterChange(field.name, e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-          >
-            <option value="">All ({fieldFilterValues.totalDocuments})</option>
-            {fieldFilterValues.values.map((item, index) => (
-              <option key={index} value={item.value}>
-                {item.value} ({item.count})
-              </option>
-            ))}
-          </select>
-          {fieldFilterValues.values.length > 50 && (
-            <div className="text-xs text-gray-500 mt-1">
-              {fieldFilterValues.values.length} options available
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Use the schema's inputType or fall back to field type
-    const inputType = field.inputType || field.type;
-    console.log(`❌ RENDERING ${inputType.toUpperCase()} INPUT for ${field.name}`);
-
-    switch (inputType) {
+  const getFieldIcon = (fieldType: string) => {
+    switch (fieldType) {
+      case 'text': return FileText;
+      case 'keyword': return Tag;
+      case 'date': return Calendar;
       case 'integer':
       case 'long':
       case 'float':
-      case 'double':
-      case 'number':
-        return (
-          <input
-            type="number"
-            value={value === '' ? '' : String(value)}
-            onChange={(e) => handleFilterChange(field.name, e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            placeholder={`Filter by ${field.name}`}
-            step={field.type === 'float' || field.type === 'double' ? 'any' : '1'}
-          />
-        );
-      
-      case 'boolean':
-        return (
-          <select
-            value={typeof value === 'boolean' ? value.toString() : String(value)}
-            onChange={(e) => handleFilterChange(field.name, e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-          >
-            <option value="">All</option>
-            <option value="true">True</option>
-            <option value="false">False</option>
-          </select>
-        );
-      
-      case 'date':
-      case 'datetime-local':
-        return (
-          <input
-            type={inputType === 'datetime-local' ? 'datetime-local' : 'date'}
-            value={String(value)}
-            onChange={(e) => handleFilterChange(field.name, e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-          />
-        );
-      
-      case 'textarea':
-        return (
-          <textarea
-            value={String(value)}
-            onChange={(e) => handleFilterChange(field.name, e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            placeholder={`Filter by ${field.name}`}
-            rows={2}
-          />
-        );
-      
-      case 'keyword':
-      case 'text':
-      default:
-        // Fallback to text input for keyword/text fields without filter values
-        return (
-          <input
-            type="text"
-            value={String(value)}
-            onChange={(e) => handleFilterChange(field.name, e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            placeholder={`Filter by ${field.name}`}
-          />
-        );
+      case 'double': return BarChart3;
+      default: return Settings;
     }
   };
 
-  const getFieldDisplayName = (fieldName: string) => {
-    return fieldName
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/^./, str => str.toUpperCase())
-      .trim();
+  const getIndexIcon = (iconName: string) => {
+    const iconMap: { [key: string]: any } = {
+      'Database': Database,
+      'BarChart3': BarChart3,
+      'TrendingUp': TrendingUp,
+      'Users': Users,
+      'Package': Package,
+      'MapPin': MapPin,
+      'Calendar': Calendar,
+      'FileText': FileText,
+      'ShoppingCart': ShoppingCart,
+      'Globe': Globe,
+      'Heart': Heart,
+      'Car': Car,
+      'Home': Home,
+      'Briefcase': Briefcase,
+      'Book': Book,
+      'Edit': Edit,
+      'Settings': Settings,
+      'DollarSign': DollarSign,
+      'Leaf': Leaf,
+      'Activity': Activity,
+      'Zap': Zap,
+      'Shield': Shield,
+      'Star': Star
+    };
+    return iconMap[iconName] || Database;
+  };
+
+  const getHealthColor = (health: string) => {
+    switch (health) {
+      case 'green': return 'text-green-600 bg-green-50';
+      case 'yellow': return 'text-yellow-600 bg-yellow-50';
+      case 'red': return 'text-red-600 bg-red-50';
+      default: return 'text-gray-600 bg-gray-50';
+    }
+  };
+
+  const getHealthIcon = (health: string) => {
+    switch (health) {
+      case 'green': return CheckCircle;
+      case 'yellow': return AlertCircle;
+      case 'red': return AlertCircle;
+      default: return Info;
+    }
+  };
+
+  const formatFileSize = (size: string) => {
+    if (!size) return 'Unknown';
+    // Convert bytes to human readable format
+    const bytes = parseInt(size);
+    if (isNaN(bytes)) return size;
+    
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    if (bytes === 0) return '0 B';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
   return (
@@ -581,8 +361,8 @@ const Search: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Advanced Search</h1>
-          <p className="text-gray-600">Search across Elasticsearch indices with dynamic filters</p>
+          <h1 className="text-3xl font-bold text-gray-900">Elasticsearch Data Search</h1>
+          <p className="text-gray-600">Search across all available data indices</p>
         </div>
         <button 
           className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors flex items-center"
@@ -594,64 +374,126 @@ const Search: React.FC = () => {
       </div>
 
       {/* Index Selection */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <Database className="h-5 w-5 text-indigo-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Select Index</h3>
+      <div className="bg-white rounded-lg shadow">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Select Data Index</h2>
+          <p className="text-sm text-gray-600">Choose an index to search and explore data</p>
+        </div>
+        
+        <div className="p-6">
+          {indices.length === 0 ? (
+            <div className="text-center py-8">
+              <Database className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No indices available</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                No Elasticsearch indices found. Please check your Elasticsearch connection.
+              </p>
             </div>
-            {isAdmin && (
-              <button
-                onClick={goToIndexManagement}
-                className="flex items-center px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Manage Indexes
-              </button>
-            )}
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {indices.map((index) => {
-              const IconComponent = getIconComponent(index.metadata?.icon || 'Database');
-              return (
-                <div
-                  key={index.index}
-                  onClick={() => setSelectedIndex(index.index)}
-                  className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                    selectedIndex === index.index
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <IconComponent className="h-8 w-8 text-indigo-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-gray-900 truncate">
-                          {index.metadata?.title || index.index}
-                        </h4>
-                        {selectedIndex === index.index && (
-                          <div className="w-2 h-2 bg-indigo-500 rounded-full flex-shrink-0"></div>
-                        )}
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {indices.map((index) => {
+                const IndexIcon = getIndexIcon(index.icon);
+                const HealthIcon = getHealthIcon(index.health);
+                const isSelected = selectedIndex === index.name;
+                const isAvailable = index.status === 'available';
+                
+                return (
+                  <div
+                    key={index.name}
+                    onClick={() => isAvailable && setSelectedIndex(index.name)}
+                    className={`relative p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                      isSelected
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : isAvailable
+                        ? 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                        : 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60'
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center space-x-3">
+                        <div className={`p-2 rounded-lg ${
+                          isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          <IndexIcon className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-gray-900 truncate">
+                            {index.displayName}
+                          </h3>
+                          <p className="text-xs text-gray-500 truncate">
+                            {index.name}
+                          </p>
+                        </div>
                       </div>
-                      <p className="mt-1 text-sm text-gray-600 line-clamp-2">
-                        {index.metadata?.description || 'No description available'}
-                      </p>
-                      <div className="mt-2 text-xs text-gray-500 space-y-1">
-                        <p>{parseInt(index['docs.count'] || '0').toLocaleString()} documents</p>
-                        <p>{index['store.size'] || 'Unknown'} storage</p>
-                        <p>Status: {index.status}</p>
+                      
+                      {/* Health Indicator */}
+                      <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${getHealthColor(index.health)}`}>
+                        <HealthIcon className="h-3 w-3" />
+                        <span className="capitalize">{index.health}</span>
                       </div>
                     </div>
+
+                    {/* Description */}
+                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                      {index.description}
+                    </p>
+
+                    {/* Stats */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <div className="flex items-center space-x-1">
+                          <FileText className="h-3 w-3" />
+                          <span>Documents</span>
+                        </div>
+                        <span className="font-medium">{index.documentCount.toLocaleString()}</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <div className="flex items-center space-x-1">
+                          <HardDrive className="h-3 w-3" />
+                          <span>Size</span>
+                        </div>
+                        <span className="font-medium">{formatFileSize(index.size)}</span>
+                      </div>
+                    </div>
+
+                    {/* Metadata Badge */}
+                    {index.hasMetadata && (
+                      <div className="absolute top-2 right-2">
+                        <div className="flex items-center space-x-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                          <Star className="h-3 w-3" />
+                          <span>Metadata</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Selection Indicator */}
+                    {isSelected && (
+                      <div className="absolute top-2 left-2">
+                        <div className="w-4 h-4 bg-indigo-600 rounded-full flex items-center justify-center">
+                          <CheckCircle className="h-3 w-3 text-white" />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
+          
+          {/* Selected Index Info */}
+          {selectedIndex && (
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-2 mb-2">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-medium text-gray-900">Selected Index</span>
+              </div>
+              <p className="text-sm text-gray-600">
+                {indices.find(i => i.name === selectedIndex)?.description}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -675,6 +517,7 @@ const Search: React.FC = () => {
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     placeholder="Search across all fields..."
+                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
               </div>
@@ -698,10 +541,15 @@ const Search: React.FC = () => {
             </div>
 
             {/* Dynamic Filters */}
-            {showFilters && indexFields.length > 0 && (
+            {showFilters && fields.length > 0 && (
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-medium text-gray-700">Filters</h4>
+                  <div className="flex items-center space-x-2">
+                    <h4 className="text-sm font-medium text-gray-700">Filters</h4>
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                      {fields.length} fields available
+                    </span>
+                  </div>
                   <button
                     onClick={clearFilters}
                     className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center"
@@ -711,61 +559,103 @@ const Search: React.FC = () => {
                   </button>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {indexFields.slice(0, 12).map((field) => (
-                    <div key={field.name}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {getFieldDisplayName(field.name)}
-                        <span className="text-xs text-gray-500 ml-1">({field.type})</span>
-                      </label>
-                      {renderFilterInput(field)}
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {(showAllFilters ? fields : fields.slice(0, 6)).map((field) => {
+                    const FieldIcon = getFieldIcon(field.type);
+                    return (
+                      <div key={field.name}>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <div className="flex items-center">
+                            <FieldIcon className="h-4 w-4 mr-1" />
+                            {field.displayName}
+                          </div>
+                        </label>
+                        {field.type === 'date' ? (
+                          <div className="space-y-2">
+                            <input
+                              type="date"
+                              value={filters[field.name] || ''}
+                              onChange={(e) => handleFilterChange(field.name, e.target.value)}
+                              className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                              placeholder={`Select ${field.displayName}`}
+                            />
+                          </div>
+                        ) : field.type === 'integer' || field.type === 'long' || field.type === 'float' || field.type === 'double' ? (
+                          <div className="space-y-2">
+                            <input
+                              type="number"
+                              value={filters[field.name] || ''}
+                              onChange={(e) => handleFilterChange(field.name, e.target.value)}
+                              className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                              placeholder={`Enter ${field.displayName}`}
+                            />
+                            {filterValues[field.name] && filterValues[field.name].length > 0 && (
+                              <select
+                                value={filters[field.name] || ''}
+                                onChange={(e) => handleFilterChange(field.name, e.target.value)}
+                                className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                              >
+                                <option value="">All {field.displayName}</option>
+                                {filterValues[field.name].slice(0, 20).map((item) => (
+                                  <option key={item.value} value={item.value}>
+                                    {item.value} ({item.count})
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={filters[field.name] || ''}
+                              onChange={(e) => handleFilterChange(field.name, e.target.value)}
+                              className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                              placeholder={`Search ${field.displayName}`}
+                            />
+                            {filterValues[field.name] && filterValues[field.name].length > 0 && (
+                              <select
+                                value={filters[field.name] || ''}
+                                onChange={(e) => handleFilterChange(field.name, e.target.value)}
+                                className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                              >
+                                <option value="">All {field.displayName}</option>
+                                {filterValues[field.name].slice(0, 50).map((item) => (
+                                  <option key={item.value} value={item.value}>
+                                    {item.value} ({item.count})
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 
-                {indexFields.length > 12 && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    Showing first 12 fields. More fields available in the index schema.
-                  </p>
+                {fields.length > 6 && (
+                  <div className="mt-4 text-center">
+                    <button 
+                      onClick={() => setShowAllFilters(!showAllFilters)}
+                      className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center justify-center mx-auto"
+                    >
+                      {showAllFilters ? (
+                        <>
+                          <ChevronDown className="h-4 w-4 mr-1 rotate-180" />
+                          Show Less
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-4 w-4 mr-1" />
+                          Show {fields.length - 6} More Filters
+                        </>
+                      )}
+                    </button>
+                  </div>
                 )}
               </div>
             )}
-
-            {/* Sort Options */}
-            <div className="border-t pt-4">
-              <div className="flex items-center space-x-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
-                  <select
-                    value={sortField}
-                    onChange={(e) => setSortField(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    <option value="_score">Relevance</option>
-                    <option value="createdAt">Created Date</option>
-                    <option value="updatedAt">Updated Date</option>
-                    {indexFields
-                      .filter(field => ['keyword', 'integer', 'long', 'float', 'double', 'date'].includes(field.type))
-                      .map(field => (
-                        <option key={field.name} value={field.name}>
-                          {getFieldDisplayName(field.name)}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Order</label>
-                  <select
-                    value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    <option value="desc">Descending</option>
-                    <option value="asc">Ascending</option>
-                  </select>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -815,50 +705,42 @@ const Search: React.FC = () => {
           </div>
           
           <div className="divide-y divide-gray-200">
-            {results.map((result, index) => {
-              console.log('Rendering result:', result);
-              const globalIndex = (currentPage - 1) * pageSize + index + 1;
-              return (
+            {results.map((result, index) => (
               <div key={index} className="p-6 hover:bg-gray-50 transition-colors">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    {/* Document Header */}
+                    {/* Result Header */}
                     <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-medium text-gray-500">#{globalIndex}</span>
-                        <span className="text-xs text-gray-400">•</span>
-                        <span className="text-sm text-gray-500">Document ID: {result._id}</span>
-                      </div>
-                      {/*
-                      result._score && (
-                        <div className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                          Score: {result._score.toFixed(2)}
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 rounded-lg bg-blue-50">
+                          <Database className="h-5 w-5 text-blue-600" />
                         </div>
-                      )
-                      */}
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900">
+                            Document {result._id}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            From {selectedIndex} index
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Document Fields */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {Object.entries(result._source || {}).map(([key, value]) => {
-                        if (key.startsWith('_')) return null;
-                        return (
-                          <div key={key} className="text-sm">
-                            <span className="font-medium text-gray-700">
-                              {getFieldDisplayName(key)}:
-                            </span>
-                            <span className="ml-2 text-gray-900 break-words">
-                              {value !== null && value !== undefined ? String(value) : 'N/A'}
-                            </span>
-                          </div>
-                        );
-                      })}
+                    {/* Result Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                      {Object.keys(result).map((key) => (
+                        <div key={key} className="break-words">
+                          <span className="font-medium text-gray-700">{key}:</span>
+                          <span className="ml-2 text-gray-900">
+                            {typeof result[key] === 'object' ? JSON.stringify(result[key]) : String(result[key])}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
               </div>
-              );
-            })}
+            ))}
           </div>
           
           {/* Pagination */}
@@ -870,7 +752,7 @@ const Search: React.FC = () => {
                   <label className="text-sm text-gray-700">Show:</label>
                   <select
                     value={pageSize}
-                    onChange={(e) => handlePageSizeChange(parseInt(e.target.value))}
+                    onChange={(e) => setPageSize(parseInt(e.target.value))}
                     className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     disabled={loading}
                   >
@@ -889,7 +771,6 @@ const Search: React.FC = () => {
 
                 {/* Pagination Controls */}
                 <div className="flex items-center space-x-1">
-                  {/* First Page */}
                   <button
                     onClick={() => handlePageChange(1)}
                     disabled={currentPage === 1 || loading}
@@ -897,8 +778,6 @@ const Search: React.FC = () => {
                   >
                     First
                   </button>
-
-                  {/* Previous Page */}
                   <button
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1 || loading}
@@ -906,35 +785,6 @@ const Search: React.FC = () => {
                   >
                     Previous
                   </button>
-
-                  {/* Page Numbers */}
-                  {(() => {
-                    const totalPages = Math.ceil(totalResults / pageSize);
-                    const maxVisiblePages = 5;
-                    const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-                    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-                    
-                    const pages = [];
-                    for (let i = startPage; i <= endPage; i++) {
-                      pages.push(
-                        <button
-                          key={i}
-                          onClick={() => handlePageChange(i)}
-                          disabled={loading}
-                          className={`px-3 py-1 text-sm border rounded ${
-                            i === currentPage
-                              ? 'bg-indigo-600 text-white border-indigo-600'
-                              : 'border-gray-300 hover:bg-gray-50'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                          {i}
-                        </button>
-                      );
-                    }
-                    return pages;
-                  })()}
-
-                  {/* Next Page */}
                   <button
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage >= Math.ceil(totalResults / pageSize) || loading}
@@ -942,8 +792,6 @@ const Search: React.FC = () => {
                   >
                     Next
                   </button>
-
-                  {/* Last Page */}
                   <button
                     onClick={() => handlePageChange(Math.ceil(totalResults / pageSize))}
                     disabled={currentPage >= Math.ceil(totalResults / pageSize) || loading}
@@ -959,7 +807,7 @@ const Search: React.FC = () => {
       )}
 
       {/* No Results */}
-      {!loading && (results?.length || 0) === 0 && (searchTerm || Object.keys(filters).length > 0) && (
+      {!loading && (results?.length || 0) === 0 && (searchTerm || Object.values(filters).some(v => v)) && (
         <div className="text-center py-12">
           <SearchIcon className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No results found</h3>
@@ -979,9 +827,9 @@ const Search: React.FC = () => {
       {!selectedIndex && (
         <div className="text-center py-12">
           <Database className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Select an index to search</h3>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Select a Data Index</h3>
           <p className="mt-1 text-sm text-gray-500">
-            Choose an index from the list above to start searching. Each index contains different types of data.
+            Choose an index from the dropdown above to start searching.
           </p>
         </div>
       )}

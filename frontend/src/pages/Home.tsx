@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store/store';
+import { useSystemSettings, defaultSystemSettings } from '../contexts/SystemSettingsContext';
 import { 
   BarChart3, 
   Search, 
@@ -17,6 +18,10 @@ import {
 
 const Home: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
+  const { settings } = useSystemSettings();
+  
+  const siteName = settings?.siteName || defaultSystemSettings.siteName;
+  const siteDescription = settings?.siteDescription || defaultSystemSettings.siteDescription;
 
   const features = [
     {
@@ -74,11 +79,11 @@ const Home: React.FC = () => {
             <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
               Welcome to{' '}
               <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                SupplyLink
+                {siteName}
               </span>
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-              Your comprehensive agricultural analytics platform. Explore data, gain insights, and make informed decisions with our powerful tools.
+              {siteDescription}
             </p>
             <div className="flex items-center justify-center space-x-8 text-sm text-gray-500">
               <div className="flex items-center">

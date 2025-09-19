@@ -31,12 +31,20 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    console.error('API Error:', error);
+    
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
       // Use window.location.replace to avoid adding to history
       window.location.replace('/login');
     }
+    
+    // Handle network errors
+    if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+      console.error('Backend server connection failed. Make sure the backend is running on port 5001.');
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -93,6 +101,37 @@ export const adminAPI = {
   // Create user
   createUser: (userData: any) =>
     api.post('/admin/users', userData),
+
+  // All Settings Management
+  getAllSettings: () =>
+    api.get('/admin/elasticsearch/all-settings'),
+
+  updateAllSettings: (settings: any) =>
+    api.put('/admin/elasticsearch/all-settings', { settings }),
+
+  resetAllSettings: () =>
+    api.post('/admin/elasticsearch/all-settings/reset'),
+
+  // System Settings Management
+  getSystemSettings: () =>
+    api.get('/admin/elasticsearch/system-settings'),
+
+  // Public System Settings (for guest users)
+  getPublicSystemSettings: () =>
+    api.get('/public/system-settings'),
+
+  updateSystemSettings: (settings: any) =>
+    api.put('/admin/elasticsearch/system-settings', { settings }),
+
+  // Import Settings Management
+  getImportSettings: () =>
+    api.get('/admin/elasticsearch/import-settings'),
+
+  updateImportSettings: (settings: any) =>
+    api.put('/admin/elasticsearch/import-settings', { settings }),
+
+  resetImportSettings: () =>
+    api.post('/admin/elasticsearch/import-settings/reset'),
 
   // Elasticsearch Admin API
   getElasticsearchHealth: () =>
@@ -156,6 +195,38 @@ export const adminAPI = {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('SSE Error response:', errorText);
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+    }
+    
+    return response;
+  },
+
+  importElasticsearchLargeFile: async (indexName: string, file: File, bulkSize?: number) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (bulkSize) {
+      formData.append('bulkSize', bulkSize.toString());
+    }
+    
+    // Get auth token from localStorage
+    const token = localStorage.getItem('token');
+    console.log('Using token for large file SSE:', token ? 'Token found' : 'No token');
+    
+    // Use fetch for Server-Sent Events for large files
+    const response = await fetch(`/api/admin/elasticsearch/indices/${indexName}/import-large-file`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include', // Include cookies for authentication
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
+    });
+    
+    console.log('Large file SSE Response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Large file SSE Error response:', errorText);
       throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
     }
     
@@ -250,6 +321,22 @@ export const agriculturalAPI = {
   // Get filter options
   getFilters: () => 
     api.get('/agricultural/filters'),
+
+  // Index-based search API
+  getIndices: () => 
+    api.get('/agricultural/indices'),
+
+  getIndexFields: (indexName: string) => 
+    api.get(`/agricultural/indices/${indexName}/fields`),
+
+  getIndexFilterValues: (indexName: string, fieldName: string, size = 1000) => 
+    api.get(`/agricultural/indices/${indexName}/filter-values/${fieldName}`, { params: { size } }),
+
+  getAllIndexFilterValues: (indexName: string, size = 1000) => 
+    api.get(`/agricultural/indices/${indexName}/filter-values`, { params: { size } }),
+
+  searchIndex: (indexName: string, params = {}) => 
+    api.get(`/agricultural/indices/${indexName}/search`, { params }),
 };
 
 // Health check

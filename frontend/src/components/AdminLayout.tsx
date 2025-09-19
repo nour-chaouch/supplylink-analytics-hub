@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store/store';
 import { logout } from '../store/slices/authSlice';
+import { useSystemSettings, defaultSystemSettings } from '../contexts/SystemSettingsContext';
 import { 
   BarChart3, 
   Users, 
@@ -13,7 +14,8 @@ import {
   X,
   Home,
   Shield,
-  ChevronRight
+  ChevronRight,
+  Sliders
 } from 'lucide-react';
 
 const AdminLayout: React.FC = () => {
@@ -22,11 +24,15 @@ const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { settings } = useSystemSettings();
+  
+  const siteName = settings?.siteName || defaultSystemSettings.siteName;
 
   const adminNavigation = [
     { name: 'Admin Dashboard', href: '/admin', icon: Settings },
     { name: 'User Management', href: '/admin/users', icon: Users },
     { name: 'Elasticsearch', href: '/admin/elasticsearch', icon: Database },
+    { name: 'All Settings', href: '/admin/all-settings', icon: Sliders },
   ];
 
   const handleLogout = () => {
@@ -56,7 +62,7 @@ const AdminLayout: React.FC = () => {
             <div className="flex-shrink-0 flex items-center px-4">
               <div className="flex items-center">
                 <Shield className="h-8 w-8 text-red-600 mr-2" />
-                <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
+                <h1 className="text-xl font-bold text-gray-900">{siteName} Admin</h1>
               </div>
             </div>
             <nav className="mt-5 px-2 space-y-1">

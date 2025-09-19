@@ -98,6 +98,8 @@ const DataImportWizard: React.FC<DataImportWizardProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [importProgress, setImportProgress] = useState(0);
   const [importResult, setImportResult] = useState<any>(null);
+  const [progressMessage, setProgressMessage] = useState<string>('');
+  const [errorDetails, setErrorDetails] = useState<string[]>([]);
   const [progressDetails, setProgressDetails] = useState<{
     processed: number;
     total: number;
@@ -321,6 +323,30 @@ const DataImportWizard: React.FC<DataImportWizardProps> = ({
     });
   };
 
+  // Validate JSON files by reading chunks for medium-sized files
+  const validateJsonFileChunked = async (file: File): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        try {
+          const text = e.target?.result as string;
+          const jsonData = JSON.parse(text);
+          const parsedData = Array.isArray(jsonData) ? jsonData : [jsonData];
+          
+          // For medium files, limit to first 1000 records for validation
+          const sampleData = parsedData.slice(0, 1000);
+          resolve(sampleData);
+        } catch (error: any) {
+          reject(new Error(`JSON parsing failed: ${error.message}`));
+        }
+      };
+      
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(file);
+    });
+  };
+
   const analyzeFieldTypes = (data: any[]): FieldAnalysis[] => {
     if (data.length === 0) return [];
 
@@ -505,14 +531,48 @@ const DataImportWizard: React.FC<DataImportWizardProps> = ({
     setError(null);
 
     try {
-      // Parse file data based on file type
+      const fileSizeMB = selectedFile.size / (1024 * 1024);
+      
+      // For very large files (>100MB), skip frontend validation and go directly to import
+      if (fileSizeMB > 100) {
+        console.log(`Large file detected: ${fileSizeMB.toFixed(2)}MB. Skipping frontend validation.`);
+        
+        // Create a validation result that allows large files to proceed
+        const validationResult: ValidationResult = {
+          isValid: true,
+          errors: [],
+          warnings: [`Large file detected (${fileSizeMB.toFixed(2)}MB). Validation will be performed during import.`],
+          compatibility: {
+            score: 50, // Medium score for unknown compatibility
+            matchedFields: [],
+            missingFields: [],
+            incompatibleFields: []
+          },
+          fieldAnalysis: [],
+          totalRecords: 0, // Unknown at this point
+          sampleData: []
+        };
+
+        setValidationResult(validationResult);
+        setParsedData([]);
+        setCurrentStep(3);
+        return;
+      }
+
+      // Parse file data based on file type for smaller files
       let parsedData: any[] = [];
       
       if (selectedFile.type === 'application/json' || selectedFile.name.endsWith('.json')) {
-        // Parse JSON file
-        const text = await selectedFile.text();
-        const jsonData = JSON.parse(text);
-        parsedData = Array.isArray(jsonData) ? jsonData : [jsonData];
+        // Parse JSON file with chunked reading for medium files
+        if (fileSizeMB > 10) {
+          // For medium files, use chunked validation
+          parsedData = await validateJsonFileChunked(selectedFile);
+        } else {
+          // For small files, use full text method
+          const text = await selectedFile.text();
+          const jsonData = JSON.parse(text);
+          parsedData = Array.isArray(jsonData) ? jsonData : [jsonData];
+        }
       } else if (selectedFile.type === 'text/csv' || selectedFile.name.endsWith('.csv')) {
         // Parse CSV file with better handling of quoted values
         const text = await selectedFile.text();
@@ -708,92 +768,199 @@ const DataImportWizard: React.FC<DataImportWizardProps> = ({
       // Move to progress step
       setCurrentStep(5);
       
-      // Use the new progress tracking endpoint
-      const response = await adminAPI.importElasticsearchDataWithProgress(indexName, selectedFile, 1000);
+      const fileSizeMB = selectedFile.size / (1024 * 1024);
+      let response;
       
-      // Handle Server-Sent Events
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body reader available');
+      // Use different endpoints based on file size
+      if (fileSizeMB > 1000) { // >1GB - use large file endpoint for better streaming
+        console.log(`Large file detected: ${fileSizeMB.toFixed(2)}MB. Using large file endpoint.`);
+        response = await adminAPI.importElasticsearchLargeFile(indexName, selectedFile, 5000);
+      } else {
+        // Use the progress tracking endpoint for smaller files
+        response = await adminAPI.importElasticsearchDataWithProgress(indexName, selectedFile, 1000);
       }
       
-      const decoder = new TextDecoder();
-      let buffer = '';
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        
-        // Keep the last incomplete line in buffer
-        buffer = lines.pop() || '';
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              console.log('SSE Data received:', data);
+      // Handle different response types based on file size
+      if (fileSizeMB > 1000) {
+        // Handle Server-Sent Events for large files
+        if ('body' in response) {
+          const responseBody = response.body;
+          if (!responseBody) {
+            throw new Error('No response body reader available');
+          }
+
+          const reader = responseBody.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
               
-              if (data.type === 'start') {
-                console.log('Import started:', data);
-                setProgressDetails({
-                  processed: 0,
-                  total: data.total,
-                  imported: 0,
-                  errors: 0
-                });
-              } else if (data.type === 'progress') {
-                setImportProgress(data.progress);
-                setProgressDetails({
-                  processed: data.processed,
-                  total: data.total,
-                  imported: data.imported,
-                  errors: data.errors
-                });
-                console.log(`Progress: ${data.progress}% - Processed: ${data.processed}/${data.total}, Imported: ${data.imported}, Errors: ${data.errors}`);
-              } else if (data.type === 'complete') {
-                setImportProgress(100);
-                setImportResult({
-                  success: true,
-                  data: {
-                    imported: data.imported,
-                    errors: data.errors,
-                    total: data.total
+              // Keep the last incomplete line in buffer
+              buffer = lines.pop() || '';
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
+                    
+                    if (data.type === 'start') {
+                      console.log('Large file import started');
+                      setImportProgress(0);
+                      setProgressMessage('Starting large file import...');
+                    } else if (data.type === 'progress') {
+                      console.log(`Large file progress: ${data.progress}% - ${data.imported} imported, ${data.errors} errors`);
+                      setImportProgress(data.progress);
+                      setProgressMessage(`Processing documents... ${data.processed} processed, ${data.imported} imported, ${data.errors} errors`);
+                      setProgressDetails({
+                        processed: data.processed,
+                        total: data.total || data.processed,
+                        imported: data.imported,
+                        errors: data.errors
+                      });
+                    } else if (data.type === 'complete') {
+                      console.log('Large file import completed');
+                      setImportProgress(100);
+                      setProgressMessage(`Import completed! ${data.imported} documents imported, ${data.errors} errors`);
+                      setImportResult({
+                        success: true,
+                        data: {
+                          imported: data.imported,
+                          errors: data.errors,
+                          total: data.total
+                        }
+                      });
+                      setCurrentStep(6);
+                      onSuccess();
+                      return;
+                    } else if (data.type === 'error') {
+                      console.error('Large file import error:', data.message);
+                      setError(data.message);
+                      setProgressMessage('Import failed');
+                      return;
+                    }
+                  } catch (parseError) {
+                    console.warn('Failed to parse SSE data:', parseError);
                   }
-                });
-                setCurrentStep(6);
-                onSuccess();
-                break;
-              } else if (data.type === 'error') {
-                setError(data.error);
-                break;
+                }
               }
-            } catch (parseError) {
-              console.warn('Failed to parse SSE data:', parseError, 'Line:', line);
+            }
+          } finally {
+            reader.releaseLock();
+          }
+        } else {
+          setError('Invalid response format for large file import');
+        }
+      } else {
+        // Handle Server-Sent Events for smaller files
+        if ('body' in response) {
+          const responseBody = response.body;
+          if (!responseBody) {
+            throw new Error('No response body reader available');
+          }
+          
+          const reader = responseBody.getReader();
+        
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          
+          // Keep the last incomplete line in buffer
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                console.log('SSE Data received:', data);
+                
+                if (data.type === 'start') {
+                  console.log('Import started:', data);
+                  setProgressDetails({
+                    processed: 0,
+                    total: data.total,
+                    imported: 0,
+                    errors: 0
+                  });
+                } else if (data.type === 'progress') {
+                  setImportProgress(data.progress);
+                  setProgressDetails({
+                    processed: data.processed,
+                    total: data.total,
+                    imported: data.imported,
+                    errors: data.errors
+                  });
+                  console.log(`Progress: ${data.progress}% - Processed: ${data.processed}/${data.total}, Imported: ${data.imported}, Errors: ${data.errors}`);
+                } else if (data.type === 'complete') {
+                  setImportProgress(100);
+                  setImportResult({
+                    success: true,
+                    data: {
+                      imported: data.imported,
+                      errors: data.errors,
+                      total: data.total
+                    }
+                  });
+                  setCurrentStep(6);
+                  onSuccess();
+                  break;
+                } else if (data.type === 'error') {
+                  setError(data.error);
+                  break;
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse SSE data:', parseError, 'Line:', line);
+              }
             }
           }
+        }
+        } else {
+          setError('Invalid response format for SSE import');
         }
       }
     } catch (err: any) {
       console.error('Import error:', err);
-      setError(err.message || 'Import failed');
       
-      // Fallback to regular import if SSE fails
-      console.log('SSE failed, falling back to regular import...');
-      try {
-        const fallbackResponse = await adminAPI.importElasticsearchData(indexName, selectedFile);
-        if (fallbackResponse.data.success) {
-          setImportResult(fallbackResponse.data);
-          setCurrentStep(6);
-          onSuccess();
-        } else {
-          setError(fallbackResponse.data.message);
+      // Handle specific error types
+      if (err.response?.status === 408 || err.message?.includes('timed out')) {
+        const fileSizeMB = selectedFile ? selectedFile.size / (1024 * 1024) : 0;
+        setError(`Import timed out. The file is very large (${fileSizeMB.toFixed(2)}MB). Please try splitting the file into smaller chunks or contact support for assistance with very large files.`);
+      } else if (err.message?.includes('Cannot create a string longer than') || err.message?.includes('string longer than 0x1fffffe8')) {
+        const fileSizeMB = selectedFile ? selectedFile.size / (1024 * 1024) : 0;
+        // This should not happen anymore with the new streaming approach
+        setError(`File processing failed due to size limitations (${fileSizeMB.toFixed(2)}MB). Please try splitting the file into smaller chunks or contact support for assistance.`);
+      } else {
+        setError(err.message || 'Import failed');
+      }
+      
+      // Fallback to regular import if SSE fails (only for smaller files)
+      const fileSizeMB = selectedFile ? selectedFile.size / (1024 * 1024) : 0;
+      if (fileSizeMB <= 1000) {
+        console.log('SSE failed, falling back to regular import...');
+        try {
+          const fallbackResponse = await adminAPI.importElasticsearchData(indexName, selectedFile);
+          if (fallbackResponse.data.success) {
+            setImportResult(fallbackResponse.data);
+            setCurrentStep(6);
+            onSuccess();
+          } else {
+            setError(fallbackResponse.data.message);
+          }
+        } catch (fallbackErr: any) {
+          console.error('Fallback import also failed:', fallbackErr);
+          setError(fallbackErr.response?.data?.message || 'Import failed');
         }
-      } catch (fallbackErr: any) {
-        console.error('Fallback import also failed:', fallbackErr);
-        setError(fallbackErr.response?.data?.message || 'Import failed');
       }
     } finally {
       setLoading(false);
@@ -945,6 +1112,15 @@ const DataImportWizard: React.FC<DataImportWizardProps> = ({
                 <Settings className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold mb-2">Validating File</h3>
                 <p className="text-gray-600">Checking file format and compatibility</p>
+                
+                {loading && (
+                  <div className="mt-4 space-y-2">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-yellow-500 h-2 rounded-full animate-pulse" style={{ width: '60%' }} />
+                    </div>
+                    <p className="text-sm text-gray-500">Validating file structure and compatibility...</p>
+                  </div>
+                )}
               </div>
 
               {selectedFile && (
@@ -1310,6 +1486,21 @@ const DataImportWizard: React.FC<DataImportWizardProps> = ({
                     <span>{progressDetails.processed.toLocaleString()} / {progressDetails.total.toLocaleString()} records</span>
                   )}
                 </div>
+                
+                {/* Error Details */}
+                {errorDetails.length > 0 && (
+                  <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                    <div className="font-medium text-red-800 mb-2">Common Errors:</div>
+                    <ul className="list-disc list-inside space-y-1">
+                      {errorDetails.slice(0, 5).map((error, index) => (
+                        <li key={index}>{error}</li>
+                      ))}
+                      {errorDetails.length > 5 && (
+                        <li className="text-red-600">... and {errorDetails.length - 5} more errors</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
                 
                 {progressDetails && (
                   <div className="grid grid-cols-3 gap-4 text-sm">

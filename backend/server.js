@@ -29,6 +29,48 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'SupplyLink Backend is running' });
 });
 
+// Public system settings endpoint for guest users
+app.get('/api/public/system-settings', (req, res) => {
+  try {
+    console.log('Public system settings endpoint accessed');
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Read settings from file
+    const settingsPath = path.join(__dirname, 'data', 'settings.json');
+    let settings = {};
+    
+    if (fs.existsSync(settingsPath)) {
+      const settingsData = fs.readFileSync(settingsPath, 'utf8');
+      settings = JSON.parse(settingsData);
+      console.log('Settings loaded from file:', settings.system);
+    } else {
+      console.log('Settings file not found, using defaults');
+    }
+    
+    // Return only public system settings
+    const publicSettings = {
+      siteName: settings.system?.siteName || 'SupplyLink Analytics Hub',
+      siteDescription: settings.system?.siteDescription || 'Agricultural data analytics platform',
+      maintenanceMode: settings.system?.maintenanceMode !== undefined ? settings.system.maintenanceMode : false,
+      allowRegistration: settings.system?.allowRegistration !== undefined ? settings.system.allowRegistration : true,
+      enableNotifications: settings.system?.enableNotifications !== undefined ? settings.system.enableNotifications : true
+    };
+    
+    console.log('Returning public settings:', publicSettings);
+    res.json({
+      success: true,
+      settings: publicSettings
+    });
+  } catch (error) {
+    console.error('Error getting public system settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get system settings'
+    });
+  }
+});
+
 // Routes
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/faostat', faostatRoutes);

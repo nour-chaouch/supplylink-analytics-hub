@@ -20,6 +20,26 @@ const generateRefreshToken = (id) => {
 // @access  Public
 const registerUser = async (req, res) => {
   try {
+    // Check if registration is allowed
+    const fs = require('fs');
+    const path = require('path');
+    
+    const settingsPath = path.join(__dirname, '..', 'data', 'settings.json');
+    let allowRegistration = true; // Default to true if settings file doesn't exist
+    
+    if (fs.existsSync(settingsPath)) {
+      const settingsData = fs.readFileSync(settingsPath, 'utf8');
+      const settings = JSON.parse(settingsData);
+      allowRegistration = settings.system?.allowRegistration !== undefined ? settings.system.allowRegistration : true;
+    }
+    
+    if (!allowRegistration) {
+      return res.status(403).json({
+        success: false,
+        message: 'Registration is currently disabled by administrator'
+      });
+    }
+
     const { name, email, password, role } = req.body;
 
     // Validate required fields

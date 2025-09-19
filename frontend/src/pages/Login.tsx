@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../store/store';
 import { loginUser, clearError } from '../store/slices/authSlice';
+import { useSystemSettings, defaultSystemSettings } from '../contexts/SystemSettingsContext';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
 const Login: React.FC = () => {
@@ -15,6 +16,10 @@ const Login: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { loading, error } = useSelector((state: RootState) => state.auth);
+  const { settings } = useSystemSettings();
+  
+  const siteName = settings?.siteName || defaultSystemSettings.siteName;
+  const allowRegistration = settings?.allowRegistration !== undefined ? settings.allowRegistration : defaultSystemSettings.allowRegistration;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -40,10 +45,10 @@ const Login: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to SupplyLink
+            Sign in to {siteName}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Admin access only
+            {allowRegistration ? 'Sign in to your account' : 'Admin access only'}
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -126,6 +131,21 @@ const Login: React.FC = () => {
             </button>
           </div>
         </form>
+        
+        {/* Registration Link */}
+        {allowRegistration && (
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Don't have an account?{' '}
+              <Link
+                to="/register"
+                className="font-medium text-indigo-600 hover:text-indigo-500"
+              >
+                Sign up here
+              </Link>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

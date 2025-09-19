@@ -85,6 +85,10 @@ class ProducerPriceService extends ElasticsearchService {
   // Get analytics data
   async getAnalytics(filters = {}) {
     try {
+      if (!this.client) {
+        throw new Error('Elasticsearch client not initialized');
+      }
+
       const mustQueries = [];
       
       if (filters.domainCode) {
@@ -183,16 +187,32 @@ class ProducerPriceService extends ElasticsearchService {
   // Get filter options
   async getFilterOptions() {
     try {
+      if (!this.client) {
+        throw new Error('Elasticsearch client not initialized');
+      }
+
+      // Check if index exists first
+      const indexExists = await this.client.indices.exists({ index: this.indexName });
+      if (!indexExists) {
+        console.log(`Index ${this.indexName} does not exist, returning empty filter options`);
+        return {
+          areas: [],
+          items: [],
+          years: [],
+          domainCodes: []
+        };
+      }
+
       const aggregations = {
         areas: {
           terms: {
-            field: 'area.keyword',
+            field: 'area',
             size: 1000
           }
         },
         items: {
           terms: {
-            field: 'item.keyword',
+            field: 'item',
             size: 1000
           }
         },
