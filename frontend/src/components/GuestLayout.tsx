@@ -28,10 +28,7 @@ const GuestLayout: React.FC = () => {
 
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-    { name: 'Search', href: '/search', icon: Search },
-    { name: 'Producer Prices', href: '/producer-prices', icon: DollarSign },
-    { name: 'Crops & Livestock', href: '/crops-livestock', icon: Leaf },
+    { name: 'Search & Analytics', href: '/search', icon: Search },
   ];
 
   const handleLogout = () => {

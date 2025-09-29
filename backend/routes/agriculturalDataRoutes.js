@@ -1,175 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const ProducerPriceService = require('../services/ProducerPriceService');
-const CropsLivestockService = require('../services/CropsLivestockService');
-
-// Lazy initialization of services
-let producerPriceService = null;
-let cropsLivestockService = null;
-
-const getServices = () => {
-  if (!producerPriceService) {
-    producerPriceService = new ProducerPriceService();
-  }
-  if (!cropsLivestockService) {
-    cropsLivestockService = new CropsLivestockService();
-  }
-  return { producerPriceService, cropsLivestockService };
-};
-
-// Get all producer prices with optional filters
-router.get('/producer-prices', async (req, res) => {
-  try {
-    const { producerPriceService } = getServices();
-    const { area, item, year, domainCode, limit = 50, page = 1 } = req.query;
-    
-    const filters = {};
-    if (area) filters.area = area;
-    if (item) filters.item = item;
-    if (year) filters.year = year;
-    if (domainCode) filters.domainCode = domainCode;
-
-    const result = await producerPriceService.getProducerPrices(filters, parseInt(page), parseInt(limit));
-
-    res.json({
-      success: true,
-      data: result.data,
-      pagination: result.pagination
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Get all crops and livestock data with optional filters
-router.get('/crops-livestock', async (req, res) => {
-  try {
-    const { cropsLivestockService } = getServices();
-    const { area, item, year, domainCode, element, limit = 50, page = 1 } = req.query;
-    
-    const filters = {};
-    if (area) filters.area = area;
-    if (item) filters.item = item;
-    if (year) filters.year = year;
-    if (domainCode) filters.domainCode = domainCode;
-    if (element) filters.element = element;
-
-    const result = await cropsLivestockService.getCropsLivestock(filters, parseInt(page), parseInt(limit));
-
-    res.json({
-      success: true,
-      data: result.data,
-      pagination: result.pagination
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Search across both datasets
-router.get('/search', async (req, res) => {
-  try {
-    const { producerPriceService, cropsLivestockService } = getServices();
-    const { query, domainCode, area, year, limit = 50, page = 1 } = req.query;
-    
-    const filters = {};
-    if (domainCode) filters.domainCode = domainCode;
-    if (area) filters.area = area;
-    if (year) filters.year = year;
-
-    // Search in both collections
-    const [producerPrices, cropsLivestock] = await Promise.all([
-      producerPriceService.searchProducerPrices(query, filters),
-      cropsLivestockService.searchCropsLivestock(query, filters)
-    ]);
-
-    // Combine and sort results
-    const combinedData = [...producerPrices, ...cropsLivestock]
-      .sort((a, b) => new Date(b.scrapedAt) - new Date(a.scrapedAt))
-      .slice(0, parseInt(limit));
-
-    res.json({
-      success: true,
-      data: combinedData,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: combinedData.length,
-        pages: Math.ceil(combinedData.length / parseInt(limit))
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Get analytics data
-router.get('/analytics', async (req, res) => {
-  try {
-    const { producerPriceService, cropsLivestockService } = getServices();
-    const { domainCode, area, year } = req.query;
-    
-    const filters = {};
-    if (domainCode) filters.domainCode = domainCode;
-    if (area) filters.area = area;
-    if (year) filters.year = year;
-
-    // Get aggregated data from both services
-    const [producerPricesStats, cropsLivestockStats] = await Promise.all([
-      producerPriceService.getAnalytics(filters),
-      cropsLivestockService.getAnalytics(filters)
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        producerPrices: producerPricesStats,
-        cropsLivestock: cropsLivestockStats
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Get filter options
-router.get('/filters', async (req, res) => {
-  try {
-    const { producerPriceService, cropsLivestockService } = getServices();
-    const [producerFilters, cropsFilters] = await Promise.all([
-      producerPriceService.getFilterOptions(),
-      cropsLivestockService.getFilterOptions()
-    ]);
-
-    // Combine and deduplicate filter options
-    const allAreas = [...new Set([...producerFilters.areas, ...cropsFilters.areas])].sort();
-    const allItems = [...new Set([...producerFilters.items, ...cropsFilters.items])].sort();
-    const allYears = [...new Set([...producerFilters.years, ...cropsFilters.years])].sort((a, b) => b - a);
-    const allDomainCodes = [...new Set([...producerFilters.domainCodes, ...cropsFilters.domainCodes])].sort();
-    const allElements = [...new Set([...cropsFilters.elements])].sort();
-
-    res.json({
-      success: true,
-      data: {
-        areas: allAreas,
-        items: allItems,
-        years: allYears,
-        domainCodes: allDomainCodes,
-        elements: allElements
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 // Get available indices with MongoDB metadata
 router.get('/indices', async (req, res) => {
   try {
-    const { producerPriceService, cropsLivestockService } = getServices();
+    // Get Elasticsearch client from any available service
+    const ElasticsearchService = require('../services/ElasticsearchService');
+    const esService = new ElasticsearchService();
+    const client = esService.client;
     
-    // Use any available service to get Elasticsearch client
-    const client = producerPriceService.client || cropsLivestockService.client;
     if (!client) {
       return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
     }
@@ -237,11 +76,12 @@ router.get('/indices', async (req, res) => {
 // Get index fields/schema
 router.get('/indices/:indexName/fields', async (req, res) => {
   try {
-    const { producerPriceService, cropsLivestockService } = getServices();
     const { indexName } = req.params;
     
-    // Use any available service to get Elasticsearch client
-    const client = producerPriceService.client || cropsLivestockService.client;
+    const ElasticsearchService = require('../services/ElasticsearchService');
+    const esService = new ElasticsearchService();
+    const client = esService.client;
+    
     if (!client) {
       return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
     }
@@ -328,8 +168,9 @@ router.get('/indices/:indexName/filter-values', async (req, res) => {
     }
     
     // Fallback to Elasticsearch if MongoDB doesn't have data
-    const { producerPriceService, cropsLivestockService } = getServices();
-    const client = producerPriceService.client || cropsLivestockService.client;
+    const ElasticsearchService = require('../services/ElasticsearchService');
+    const esService = new ElasticsearchService();
+    const client = esService.client;
     
     if (!client) {
       return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
@@ -434,8 +275,9 @@ router.get('/indices/:indexName/filter-values/:fieldName', async (req, res) => {
     }
     
     // Fallback to Elasticsearch if MongoDB doesn't have data
-    const { producerPriceService, cropsLivestockService } = getServices();
-    const client = producerPriceService.client || cropsLivestockService.client;
+    const ElasticsearchService = require('../services/ElasticsearchService');
+    const esService = new ElasticsearchService();
+    const client = esService.client;
     
     if (!client) {
       return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
@@ -489,12 +331,13 @@ router.get('/indices/:indexName/filter-values/:fieldName', async (req, res) => {
 // Search in specific index
 router.get('/indices/:indexName/search', async (req, res) => {
   try {
-    const { producerPriceService, cropsLivestockService } = getServices();
     const { indexName } = req.params;
     const { q: query, page = 1, limit = 50, ...filters } = req.query;
     
-    // Use any available service to get Elasticsearch client
-    const client = producerPriceService.client || cropsLivestockService.client;
+    const ElasticsearchService = require('../services/ElasticsearchService');
+    const esService = new ElasticsearchService();
+    const client = esService.client;
+    
     if (!client) {
       return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
     }
@@ -766,8 +609,9 @@ router.get('/indices/:indexName/suggestions', async (req, res) => {
       });
     }
     
-    const { producerPriceService, cropsLivestockService } = getServices();
-    const client = producerPriceService.client || cropsLivestockService.client;
+    const ElasticsearchService = require('../services/ElasticsearchService');
+    const esService = new ElasticsearchService();
+    const client = esService.client;
     
     if (!client) {
       return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
@@ -835,13 +679,155 @@ router.get('/indices/:indexName/suggestions', async (req, res) => {
   }
 });
 
+// Dynamic analytics endpoint for any index
+router.get('/indices/:indexName/analytics', async (req, res) => {
+  try {
+    const { indexName } = req.params;
+    const { field, groupBy, timeField, timeRange, limit = 10 } = req.query;
+    
+    const ElasticsearchService = require('../services/ElasticsearchService');
+    const esService = new ElasticsearchService();
+    const client = esService.client;
+    
+    if (!client) {
+      return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
+    }
+    
+    // Check if index exists
+    const indexExists = await client.indices.exists({ index: indexName });
+    if (!indexExists) {
+      return res.status(404).json({ success: false, message: 'Index not found' });
+    }
+    
+    // Get mapping to determine available fields
+    const mapping = await client.indices.getMapping({ index: indexName });
+    const properties = mapping[indexName].mappings.properties;
+    
+    // Build analytics aggregations - only add aggregations that are needed
+    const aggregations = {};
+    
+    // Get total document count using a different approach
+    const totalCountResponse = await client.count({
+      index: indexName
+    });
+    const totalDocuments = totalCountResponse.count;
+    
+    // Add field-specific analytics if field is specified
+    if (field && properties[field]) {
+      const fieldType = properties[field].type;
+      
+      if (fieldType === 'integer' || fieldType === 'long' || fieldType === 'float' || fieldType === 'double') {
+        // Numeric field analytics
+        aggregations.field_stats = {
+          stats: {
+            field: field
+          }
+        };
+        
+        // Top values for numeric fields
+        aggregations.top_values = {
+          terms: {
+            field: field,
+            size: parseInt(limit),
+            order: { _count: 'desc' }
+          }
+        };
+      } else if (fieldType === 'keyword' || fieldType === 'text') {
+        // Text/keyword field analytics
+        aggregations.top_values = {
+          terms: {
+            field: field,
+            size: parseInt(limit),
+            order: { _count: 'desc' }
+          }
+        };
+      }
+    }
+    
+    // Add group by aggregation if specified
+    if (groupBy && properties[groupBy]) {
+      aggregations.group_by = {
+        terms: {
+          field: groupBy,
+          size: parseInt(limit),
+          order: { _count: 'desc' }
+        }
+      };
+    }
+    
+    // Add time series if time field is specified and is actually a date field
+    if (timeField && properties[timeField] && properties[timeField].type === 'date') {
+      const timeRangeValue = timeRange || '1y';
+      aggregations.time_series = {
+        date_histogram: {
+          field: timeField,
+          calendar_interval: timeRangeValue === '1y' ? 'month' : timeRangeValue === '1M' ? 'day' : 'year',
+          min_doc_count: 0
+        }
+      };
+    }
+    
+    // Get all available fields for reference
+    const availableFields = Object.keys(properties).map(fieldName => ({
+      name: fieldName,
+      type: properties[fieldName].type,
+      searchable: properties[fieldName].type === 'text' || properties[fieldName].type === 'keyword'
+    }));
+    
+    // Perform analytics query
+    const response = await client.search({
+      index: indexName,
+      body: {
+        query: { match_all: {} },
+        aggs: aggregations,
+        size: 0
+      }
+    });
+    
+    const aggs = response.aggregations;
+    
+    // Format the response
+    const analyticsData = {
+      indexName,
+      totalDocuments: totalDocuments,
+      fieldStats: aggs.field_stats || null,
+      topValues: aggs.top_values ? aggs.top_values.buckets.map(bucket => ({
+        value: bucket.key,
+        count: bucket.doc_count
+      })) : [],
+      groupBy: aggs.group_by ? aggs.group_by.buckets.map(bucket => ({
+        value: bucket.key,
+        count: bucket.doc_count
+      })) : [],
+      timeSeries: aggs.time_series ? aggs.time_series.buckets.map(bucket => ({
+        date: bucket.key_as_string || bucket.key,
+        count: bucket.doc_count
+      })) : [],
+      availableFields
+    };
+    
+    res.json({
+      success: true,
+      data: analyticsData
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Legacy analytics endpoint - redirects to dynamic index analytics
+router.get('/analytics', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        message: 'Analytics endpoint is now dynamic. Use /indices/{indexName}/analytics for specific index analytics.',
+        availableIndices: 'Use /indices endpoint to get available indices for analytics.'
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 module.exports = router;
-
-
-
-
-
-
-
-
-

@@ -31,10 +31,7 @@ const Layout: React.FC = () => {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-    { name: 'Search', href: '/search', icon: Search },
-    { name: 'Producer Prices', href: '/producer-prices', icon: DollarSign },
-    { name: 'Crops & Livestock', href: '/crops-livestock', icon: Leaf },
+    { name: 'Search & Analytics', href: '/search', icon: Search },
   ];
 
   const adminNavigation = [

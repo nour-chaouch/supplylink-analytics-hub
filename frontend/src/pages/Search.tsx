@@ -37,8 +37,11 @@ import {
   Zap,
   Shield,
   Star,
-  Info
+  Info,
+  TrendingDown,
+  PieChart as PieChartIcon
 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, AreaChart, Area, ScatterChart, Scatter } from 'recharts';
 import { RootState } from '../store/store';
 
 interface Index {
@@ -83,6 +86,16 @@ interface SearchResult {
   [key: string]: any;
 }
 
+interface AnalyticsData {
+  indexName: string;
+  totalDocuments: number;
+  fieldStats: any;
+  topValues: Array<{ value: any; count: number }>;
+  groupBy: Array<{ value: any; count: number }>;
+  timeSeries: Array<{ date: string; count: number }>;
+  availableFields: Array<{ name: string; type: string; searchable: boolean }>;
+}
+
 const Search: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
   const isAdmin = user?.role === 'admin';
@@ -98,6 +111,32 @@ const Search: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [totalResults, setTotalResults] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Analytics state
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'search' | 'analytics'>('search');
+  const [analyticsField, setAnalyticsField] = useState('');
+  const [analyticsGroupBy, setAnalyticsGroupBy] = useState('');
+  const [analyticsTimeField, setAnalyticsTimeField] = useState('');
+  const [analyticsLimit, setAnalyticsLimit] = useState(10);
+  const [chartConfigs, setChartConfigs] = useState({
+    topValues: {
+      show: true,
+      type: 'bar' as 'bar' | 'line' | 'area' | 'scatter'
+    },
+    distribution: {
+      show: true,
+      type: 'pie' as 'pie' | 'bar'
+    },
+    timeSeries: {
+      show: true,
+      type: 'line' as 'line' | 'area' | 'bar'
+    },
+    fieldStats: {
+      show: true
+    }
+  });
   const [pageSize, setPageSize] = useState(20);
   const [showFilters, setShowFilters] = useState(false);
   const [showAllFilters, setShowAllFilters] = useState(false);
@@ -225,6 +264,28 @@ const Search: React.FC = () => {
       setError(err.response?.data?.message || 'Search failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAnalytics = async () => {
+    if (!selectedIndex) return;
+    
+    setAnalyticsLoading(true);
+    try {
+      const params: any = {};
+      if (analyticsField) params.field = analyticsField;
+      if (analyticsGroupBy) params.groupBy = analyticsGroupBy;
+      if (analyticsTimeField) params.timeField = analyticsTimeField;
+      params.limit = analyticsLimit;
+      
+      const response = await agriculturalAPI.getIndexAnalytics(selectedIndex, params);
+      if (response.data.success) {
+        setAnalyticsData(response.data.data);
+      }
+    } catch (err: any) {
+      console.error('Failed to load analytics:', err);
+    } finally {
+      setAnalyticsLoading(false);
     }
   };
 
@@ -393,8 +454,8 @@ const Search: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Elasticsearch Data Search</h1>
-          <p className="text-gray-600">Search across all available data indices</p>
+          <h1 className="text-3xl font-bold text-gray-900">Data Explorer</h1>
+          <p className="text-gray-600">Search and analyze data across all available indices</p>
         </div>
         <button 
           className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors flex items-center"
@@ -403,6 +464,34 @@ const Search: React.FC = () => {
           <Download className="h-4 w-4 mr-2" />
           Export Results
         </button>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('search')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'search'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <SearchIcon className="h-4 w-4 inline mr-2" />
+            Search
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'analytics'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <BarChart3 className="h-4 w-4 inline mr-2" />
+            Analytics
+          </button>
+        </nav>
       </div>
 
       {/* Index Selection */}
@@ -518,8 +607,8 @@ const Search: React.FC = () => {
         </div>
       </div>
 
-      {/* Search Form */}
-      {selectedIndex && (
+      {/* Search Tab Content */}
+      {activeTab === 'search' && selectedIndex && (
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="space-y-4">
             {/* Search Term */}
@@ -673,6 +762,532 @@ const Search: React.FC = () => {
                         </>
                       )}
                     </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Tab Content */}
+      {activeTab === 'analytics' && selectedIndex && (
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Analytics Dashboard</h3>
+              <button
+                onClick={loadAnalytics}
+                disabled={analyticsLoading}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {analyticsLoading ? 'Loading...' : 'Load Analytics'}
+              </button>
+            </div>
+
+            {/* Analytics Controls */}
+            <div className="space-y-4">
+              {/* Field Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Field to Analyze
+                </label>
+                <select
+                  value={analyticsField}
+                  onChange={(e) => setAnalyticsField(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">Select a field</option>
+                  {fields.map((field) => (
+                    <option key={field.name} value={field.name}>
+                      {field.displayName} ({field.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Group By
+                </label>
+                <select
+                  value={analyticsGroupBy}
+                  onChange={(e) => setAnalyticsGroupBy(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">Select group by field</option>
+                  {fields.filter(f => f.type === 'keyword' || f.type === 'text').map((field) => (
+                    <option key={field.name} value={field.name}>
+                      {field.displayName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Time Field
+                </label>
+                <select
+                  value={analyticsTimeField}
+                  onChange={(e) => setAnalyticsTimeField(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">Select time field</option>
+                  {fields.filter(f => f.type === 'date').map((field) => (
+                    <option key={field.name} value={field.name}>
+                      {field.displayName} ({field.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Results Limit
+                </label>
+                <select
+                  value={analyticsLimit}
+                  onChange={(e) => setAnalyticsLimit(parseInt(e.target.value))}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value={5}>Top 5</option>
+                  <option value={10}>Top 10</option>
+                  <option value={15}>Top 15</option>
+                  <option value={20}>Top 20</option>
+                  <option value={25}>Top 25</option>
+                  <option value={50}>Top 50</option>
+                  <option value={100}>Top 100</option>
+                </select>
+              </div>
+              </div>
+
+            </div>
+
+            {/* Analytics Results */}
+            {analyticsData && (
+              <div className="space-y-6">
+                {/* Chart Controls */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Chart Controls</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">Top Values</span>
+                      <button
+                        onClick={() => setChartConfigs(prev => ({
+                          ...prev,
+                          topValues: { ...prev.topValues, show: !prev.topValues.show }
+                        }))}
+                        className={`px-3 py-1 rounded text-xs font-medium ${
+                          chartConfigs.topValues.show 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {chartConfigs.topValues.show ? 'Show' : 'Hide'}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">Distribution</span>
+                      <button
+                        onClick={() => setChartConfigs(prev => ({
+                          ...prev,
+                          distribution: { ...prev.distribution, show: !prev.distribution.show }
+                        }))}
+                        className={`px-3 py-1 rounded text-xs font-medium ${
+                          chartConfigs.distribution.show 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {chartConfigs.distribution.show ? 'Show' : 'Hide'}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">Time Series</span>
+                      <button
+                        onClick={() => setChartConfigs(prev => ({
+                          ...prev,
+                          timeSeries: { ...prev.timeSeries, show: !prev.timeSeries.show }
+                        }))}
+                        className={`px-3 py-1 rounded text-xs font-medium ${
+                          chartConfigs.timeSeries.show 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {chartConfigs.timeSeries.show ? 'Show' : 'Hide'}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">Field Stats</span>
+                      <button
+                        onClick={() => setChartConfigs(prev => ({
+                          ...prev,
+                          fieldStats: { ...prev.fieldStats, show: !prev.fieldStats.show }
+                        }))}
+                        className={`px-3 py-1 rounded text-xs font-medium ${
+                          chartConfigs.fieldStats.show 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {chartConfigs.fieldStats.show ? 'Show' : 'Hide'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Key Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-blue-600">Total Documents</p>
+                        <p className="text-2xl font-bold text-blue-900">{analyticsData.totalDocuments.toLocaleString()}</p>
+                      </div>
+                      <div className="p-3 bg-blue-100 rounded-full">
+                        <Database className="h-6 w-6 text-blue-600" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {analyticsData.fieldStats && (
+                    <>
+                      <div className="bg-green-50 p-4 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-green-600">Average Value</p>
+                            <p className="text-2xl font-bold text-green-900">
+                              {analyticsData.fieldStats.avg ? analyticsData.fieldStats.avg.toFixed(2) : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 bg-green-100 rounded-full">
+                            <TrendingUp className="h-6 w-6 text-green-600" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-yellow-50 p-4 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-yellow-600">Min Value</p>
+                            <p className="text-2xl font-bold text-yellow-900">
+                              {analyticsData.fieldStats.min ? analyticsData.fieldStats.min.toFixed(2) : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 bg-yellow-100 rounded-full">
+                            <TrendingDown className="h-6 w-6 text-yellow-600" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-purple-50 p-4 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-purple-600">Max Value</p>
+                            <p className="text-2xl font-bold text-purple-900">
+                              {analyticsData.fieldStats.max ? analyticsData.fieldStats.max.toFixed(2) : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="p-3 bg-purple-100 rounded-full">
+                            <BarChart3 className="h-6 w-6 text-purple-600" />
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Charts */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Top Values Chart */}
+                  {chartConfigs.topValues.show && analyticsData.topValues.length > 0 && (
+                    <div className="bg-white p-6 rounded-lg border">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-lg font-semibold text-gray-900">
+                            Top Values ({Math.min(analyticsLimit, analyticsData.topValues.length)} shown)
+                          </h4>
+                          <div className="flex items-center space-x-2">
+                            <select
+                              value={chartConfigs.topValues.type}
+                              onChange={(e) => setChartConfigs(prev => ({
+                                ...prev,
+                                topValues: { ...prev.topValues, type: e.target.value as any }
+                              }))}
+                              className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            >
+                              <option value="bar">Bar</option>
+                              <option value="line">Line</option>
+                              <option value="area">Area</option>
+                              <option value="scatter">Scatter</option>
+                            </select>
+                            <button
+                              onClick={() => setChartConfigs(prev => ({
+                                ...prev,
+                                topValues: { ...prev.topValues, show: false }
+                              }))}
+                              className="text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <ResponsiveContainer width="100%" height={300}>
+                          {(() => {
+                            const data = analyticsData.topValues.slice(0, analyticsLimit);
+                            switch (chartConfigs.topValues.type) {
+                              case 'bar':
+                                return (
+                                  <BarChart data={data}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="value" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Bar dataKey="count" fill="#3b82f6" />
+                                  </BarChart>
+                                );
+                              case 'line':
+                                return (
+                                  <LineChart data={data}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="value" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} />
+                                  </LineChart>
+                                );
+                              case 'area':
+                                return (
+                                  <AreaChart data={data}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="value" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                                  </AreaChart>
+                                );
+                              case 'scatter':
+                                return (
+                                  <ScatterChart data={data}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="value" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Scatter dataKey="count" fill="#3b82f6" />
+                                  </ScatterChart>
+                                );
+                              default:
+                                return (
+                                  <BarChart data={data}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="value" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Bar dataKey="count" fill="#3b82f6" />
+                                  </BarChart>
+                                );
+                            }
+                          })()}
+                        </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* Group By Chart */}
+                  {chartConfigs.distribution.show && analyticsData.groupBy.length > 0 && (
+                    <div className="bg-white p-6 rounded-lg border">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-lg font-semibold text-gray-900">
+                            Distribution ({Math.min(analyticsLimit, analyticsData.groupBy.length)} shown)
+                          </h4>
+                          <div className="flex items-center space-x-2">
+                            <select
+                              value={chartConfigs.distribution.type}
+                              onChange={(e) => setChartConfigs(prev => ({
+                                ...prev,
+                                distribution: { ...prev.distribution, type: e.target.value as any }
+                              }))}
+                              className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            >
+                              <option value="pie">Pie</option>
+                              <option value="bar">Bar</option>
+                            </select>
+                            <button
+                              onClick={() => setChartConfigs(prev => ({
+                                ...prev,
+                                distribution: { ...prev.distribution, show: false }
+                              }))}
+                              className="text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <ResponsiveContainer width="100%" height={300}>
+                          {chartConfigs.distribution.type === 'pie' ? (
+                            <PieChart>
+                              <Pie
+                                data={analyticsData.groupBy.slice(0, analyticsLimit)}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={(props: any) => {
+                                  const entry = props;
+                                  const value = Number(entry.count) || 0;
+                                  const total = analyticsData.groupBy.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+                                  const percentage = total > 0 ? (value / total) * 100 : 0;
+                                  return `${percentage.toFixed(1)}%`;
+                                }}
+                                outerRadius={80}
+                                fill="#8884d8"
+                                dataKey="count"
+                              >
+                                {analyticsData.groupBy.slice(0, analyticsLimit).map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#ff7300'][index % 8]} />
+                                ))}
+                              </Pie>
+                              <Tooltip 
+                                formatter={(value: any, name: any, props: any) => [
+                                  `${value} (${((value / analyticsData.groupBy.reduce((sum, item) => sum + (Number(item.count) || 0), 0)) * 100).toFixed(1)}%)`,
+                                  props.payload.value
+                                ]}
+                                labelFormatter={(label: any, payload: any) => {
+                                  if (payload && payload.length > 0) {
+                                    return `Value: ${payload[0].payload.value}`;
+                                  }
+                                  return label;
+                                }}
+                              />
+                              <Legend 
+                                formatter={(value: any, entry: any) => {
+                                  const actualValue = entry.payload?.value || value;
+                                  const fullValue = String(actualValue);
+                                  return fullValue.length > 20 ? fullValue.substring(0, 17) + '...' : fullValue;
+                                }}
+                              />
+                            </PieChart>
+                          ) : (
+                            <BarChart data={analyticsData.groupBy.slice(0, analyticsLimit)}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="value" />
+                              <YAxis />
+                              <Tooltip />
+                              <Bar dataKey="count" fill="#10b981" />
+                            </BarChart>
+                          )}
+                        </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+
+                {/* Time Series Chart */}
+                {chartConfigs.timeSeries.show && analyticsData.timeSeries.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg border">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-semibold text-gray-900">Time Series</h4>
+                      <div className="flex items-center space-x-2">
+                        <select
+                          value={chartConfigs.timeSeries.type}
+                          onChange={(e) => setChartConfigs(prev => ({
+                            ...prev,
+                            timeSeries: { ...prev.timeSeries, type: e.target.value as any }
+                          }))}
+                          className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                          <option value="line">Line</option>
+                          <option value="area">Area</option>
+                          <option value="bar">Bar</option>
+                        </select>
+                        <button
+                          onClick={() => setChartConfigs(prev => ({
+                            ...prev,
+                            timeSeries: { ...prev.timeSeries, show: false }
+                          }))}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                        <ResponsiveContainer width="100%" height={300}>
+                          {(() => {
+                            const data = analyticsData.timeSeries;
+                            switch (chartConfigs.timeSeries.type) {
+                              case 'line':
+                                return (
+                                  <LineChart data={data}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} />
+                                  </LineChart>
+                                );
+                              case 'area':
+                                return (
+                                  <AreaChart data={data}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                                  </AreaChart>
+                                );
+                              default:
+                                return (
+                                  <BarChart data={data}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Bar dataKey="count" fill="#3b82f6" />
+                                  </BarChart>
+                                );
+                            }
+                          })()}
+                        </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Field Statistics Chart */}
+                {chartConfigs.fieldStats.show && analyticsData.fieldStats && (
+                  <div className="bg-white p-6 rounded-lg border">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-semibold text-gray-900">Field Statistics</h4>
+                      <button
+                        onClick={() => setChartConfigs(prev => ({
+                          ...prev,
+                          fieldStats: { ...prev.fieldStats, show: false }
+                        }))}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {analyticsData.fieldStats.count || 0}
+                        </div>
+                        <div className="text-sm text-blue-800">Count</div>
+                      </div>
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <div className="text-2xl font-bold text-green-600">
+                          {analyticsData.fieldStats.avg ? analyticsData.fieldStats.avg.toFixed(2) : 'N/A'}
+                        </div>
+                        <div className="text-sm text-green-800">Average</div>
+                      </div>
+                      <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                        <div className="text-2xl font-bold text-yellow-600">
+                          {analyticsData.fieldStats.min ? analyticsData.fieldStats.min.toFixed(2) : 'N/A'}
+                        </div>
+                        <div className="text-sm text-yellow-800">Minimum</div>
+                      </div>
+                      <div className="text-center p-4 bg-purple-50 rounded-lg">
+                        <div className="text-2xl font-bold text-purple-600">
+                          {analyticsData.fieldStats.max ? analyticsData.fieldStats.max.toFixed(2) : 'N/A'}
+                        </div>
+                        <div className="text-sm text-purple-800">Maximum</div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -944,7 +1559,7 @@ const Search: React.FC = () => {
           <Database className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Select a Data Index</h3>
           <p className="mt-1 text-sm text-gray-500">
-            Choose an index from the dropdown above to start searching.
+            Choose an index from above to start {activeTab === 'search' ? 'searching' : 'analyzing'}.
           </p>
         </div>
       )}

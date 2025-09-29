@@ -11,10 +11,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
-import Analytics from './pages/Analytics';
 import Search from './pages/Search';
-import ProducerPrices from './pages/ProducerPrices';
-import CropsLivestock from './pages/CropsLivestock';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import ElasticsearchAdmin from './pages/ElasticsearchAdmin';
@@ -44,10 +41,7 @@ function App() {
                   {/* Guest routes - accessible to all users */}
                   <Route path="/" element={<GuestLayout />}>
                     <Route index element={<Home />} />
-                    <Route path="analytics" element={<Analytics />} />
                     <Route path="search" element={<Search />} />
-                    <Route path="producer-prices" element={<ProducerPrices />} />
-                    <Route path="crops-livestock" element={<CropsLivestock />} />
                   </Route>
                   
                   {/* Authenticated routes - require login */}

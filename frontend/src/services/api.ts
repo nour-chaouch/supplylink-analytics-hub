@@ -300,28 +300,8 @@ export const adminAPI = {
     api.delete(`/admin/elasticsearch/indices/${indexName}/filter-values`),
 };
 
-// Agricultural Data API
+// Dynamic Index Management API
 export const agriculturalAPI = {
-  // Get producer prices
-  getProducerPrices: (params = {}) => 
-    api.get('/agricultural/producer-prices', { params }),
-
-  // Get crops and livestock data
-  getCropsLivestock: (params = {}) => 
-    api.get('/agricultural/crops-livestock', { params }),
-
-  // Search across both datasets
-  search: (params = {}) => 
-    api.get('/agricultural/search', { params }),
-
-  // Get analytics data
-  getAnalytics: (params = {}) => 
-    api.get('/agricultural/analytics', { params }),
-
-  // Get filter options
-  getFilters: () => 
-    api.get('/agricultural/filters'),
-
   // Index-based search API
   getIndices: () => 
     api.get('/agricultural/indices'),
@@ -340,6 +320,14 @@ export const agriculturalAPI = {
 
   getSearchSuggestions: (indexName: string, query: string, limit = 10) => 
     api.get(`/agricultural/indices/${indexName}/suggestions`, { params: { q: query, limit } }),
+
+  // Dynamic analytics for specific index
+  getIndexAnalytics: (indexName: string, params = {}) => 
+    api.get(`/agricultural/indices/${indexName}/analytics`, { params }),
+
+  // Legacy analytics endpoint (deprecated)
+  getAnalytics: (params = {}) => 
+    api.get('/agricultural/analytics', { params }),
 };
 
 // Health check
