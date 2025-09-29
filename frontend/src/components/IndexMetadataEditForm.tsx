@@ -1,6 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../services/api';
-import { Save, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { 
+  Save, 
+  X, 
+  AlertCircle, 
+  CheckCircle,
+  Database,
+  BarChart3,
+  TrendingUp,
+  Users,
+  Package,
+  MapPin,
+  Calendar,
+  FileText,
+  ShoppingCart,
+  Globe,
+  Heart,
+  Car,
+  Home,
+  Briefcase,
+  Book
+} from 'lucide-react';
 
 interface IndexMetadata {
   _id: string;
@@ -19,6 +39,28 @@ interface IndexMetadataEditFormProps {
   onSuccess: () => void;
   indexName: string;
 }
+
+// Icon mapping function
+const getIconComponent = (iconName: string) => {
+  const iconMap: { [key: string]: React.ComponentType<any> } = {
+    Database,
+    BarChart3,
+    TrendingUp,
+    Users,
+    Package,
+    MapPin,
+    Calendar,
+    FileText,
+    ShoppingCart,
+    Globe,
+    Heart,
+    Car,
+    Home,
+    Briefcase,
+    Book
+  };
+  return iconMap[iconName] || Database;
+};
 
 const ICON_OPTIONS = [
   { value: 'Database', label: 'Database', description: 'General data storage' },
@@ -199,22 +241,25 @@ const IndexMetadataEditForm: React.FC<IndexMetadataEditFormProps> = ({
                   Icon <span className="text-red-500">*</span>
                 </label>
                 <div className="grid grid-cols-5 gap-2">
-                  {ICON_OPTIONS.map((icon) => (
-                    <button
-                      key={icon.value}
-                      type="button"
-                      onClick={() => setSelectedIcon(icon.value)}
-                      className={`p-3 border rounded-lg text-center hover:bg-gray-50 ${
-                        selectedIcon === icon.value
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-300 text-gray-600'
-                      }`}
-                      title={icon.description}
-                    >
-                      <div className="text-lg mb-1">{icon.label}</div>
-                      <div className="text-xs">{icon.value}</div>
-                    </button>
-                  ))}
+                  {ICON_OPTIONS.map((icon) => {
+                    const IconComponent = getIconComponent(icon.value);
+                    return (
+                      <button
+                        key={icon.value}
+                        type="button"
+                        onClick={() => setSelectedIcon(icon.value)}
+                        className={`p-3 border rounded-lg text-center hover:bg-gray-50 flex flex-col items-center ${
+                          selectedIcon === icon.value
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 text-gray-600'
+                        }`}
+                        title={icon.description}
+                      >
+                        <IconComponent className="h-6 w-6 mb-1" />
+                        <div className="text-xs">{icon.label}</div>
+                      </button>
+                    );
+                  })}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
                   Choose an icon that represents your index

@@ -548,11 +548,13 @@ const Search: React.FC = () => {
                         </div>
                       </div>
                       
-                      {/* Health Indicator */}
+                      {/* Health Indicator 
                       <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${getHealthColor(index.health)}`}>
                         <HealthIcon className="h-3 w-3" />
                         <span className="capitalize">{index.health}</span>
                       </div>
+                      */}
+                      
                     </div>
 
                     {/* Description */}
@@ -570,6 +572,7 @@ const Search: React.FC = () => {
                         <span className="font-medium">{index.documentCount.toLocaleString()}</span>
                       </div>
                       
+                      {/*
                       <div className="flex items-center justify-between text-xs text-gray-500">
                         <div className="flex items-center space-x-1">
                           <HardDrive className="h-3 w-3" />
@@ -577,17 +580,10 @@ const Search: React.FC = () => {
                         </div>
                         <span className="font-medium">{formatFileSize(index.size)}</span>
                       </div>
+                      */}
                     </div>
 
-                    {/* Metadata Badge */}
-                    {index.hasMetadata && (
-                      <div className="absolute top-2 right-2">
-                        <div className="flex items-center space-x-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                          <Star className="h-3 w-3" />
-                          <span>Metadata</span>
-                        </div>
-                      </div>
-                    )}
+                    
 
                     {/* Selection Indicator */}
                     {isSelected && (

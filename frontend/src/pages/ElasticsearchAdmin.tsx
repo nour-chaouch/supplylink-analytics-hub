@@ -17,7 +17,20 @@ import {
   Settings,
   Wand2,
   Eye,
-  Edit
+  Edit,
+  BarChart3,
+  TrendingUp,
+  Users,
+  Package,
+  MapPin,
+  Calendar,
+  ShoppingCart,
+  Globe,
+  Heart,
+  Car,
+  Home,
+  Briefcase,
+  Book
 } from 'lucide-react';
 import DataManagement from '../components/DataManagement';
 
@@ -62,6 +75,28 @@ interface ClusterHealth {
   active_primary_shards: number;
   active_shards: number;
 }
+
+// Icon mapping function
+const getIconComponent = (iconName: string) => {
+  const iconMap: { [key: string]: React.ComponentType<any> } = {
+    Database,
+    BarChart3,
+    TrendingUp,
+    Users,
+    Package,
+    MapPin,
+    Calendar,
+    FileText,
+    ShoppingCart,
+    Globe,
+    Heart,
+    Car,
+    Home,
+    Briefcase,
+    Book
+  };
+  return iconMap[iconName] || Database;
+};
 
 const ElasticsearchAdmin = () => {
   const [clusterHealth, setClusterHealth] = useState<ClusterHealth | null>(null);
@@ -355,6 +390,12 @@ const ElasticsearchAdmin = () => {
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-2">
+                    {index.metadata?.icon && (
+                      (() => {
+                        const IconComponent = getIconComponent(index.metadata.icon);
+                        return <IconComponent className="h-5 w-5 text-gray-600" />;
+                      })()
+                    )}
                     <h3 className="font-semibold text-lg">
                       {index.metadata?.title || index.index}
                     </h3>
