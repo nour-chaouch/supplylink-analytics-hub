@@ -733,10 +733,23 @@ router.get('/indices/:indexName/analytics', async (req, res) => {
           }
         };
       } else if (fieldType === 'keyword' || fieldType === 'text') {
-        // Text/keyword field analytics
+        // Text/keyword field analytics - no field_stats for non-numeric fields
         aggregations.top_values = {
           terms: {
             field: field,
+            size: parseInt(limit),
+            order: { _count: 'desc' }
+          }
+        };
+      }
+    } else if (!field) {
+      // If no field is specified, we still need to provide some basic analytics
+      // Get top values for the first available field
+      const firstField = Object.keys(properties)[0];
+      if (firstField) {
+        aggregations.top_values = {
+          terms: {
+            field: firstField,
             size: parseInt(limit),
             order: { _count: 'desc' }
           }

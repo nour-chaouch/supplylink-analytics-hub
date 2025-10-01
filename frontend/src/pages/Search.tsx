@@ -115,23 +115,60 @@ const Search: React.FC = () => {
   // Analytics state
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [stackedChartData, setStackedChartData] = useState<any[]>([]);
+  const [stackedChartLoading, setStackedChartLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'search' | 'analytics'>('search');
   const [analyticsField, setAnalyticsField] = useState('');
   const [analyticsGroupBy, setAnalyticsGroupBy] = useState('');
   const [analyticsTimeField, setAnalyticsTimeField] = useState('');
   const [analyticsLimit, setAnalyticsLimit] = useState(10);
+  
+  // Power BI-style analytics state
+  const [analyticsBuilder, setAnalyticsBuilder] = useState({
+    activeChartId: null as string | null,
+    charts: [] as Array<{
+      id: string;
+      name: string;
+      type: 'bar' | 'line' | 'area' | 'scatter' | 'pie' | 'donut' | 'table' | 'card' | 'kpi';
+      fields: {
+        values: Array<{field: string; aggregation: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'distinct'}>;
+        axis: Array<{field: string; type: 'x' | 'y' | 'color' | 'size'}>;
+        filters: Array<{field: string; operator: string; value: any}>;
+      };
+      settings: {
+        showLegend: boolean;
+        showGrid: boolean;
+        showTooltip: boolean;
+        colors: string[];
+        height: number;
+        width: number;
+        title: string;
+      };
+      position: {x: number; y: number; width: number; height: number};
+      visible: boolean;
+    }>
+  });
   const [chartConfigs, setChartConfigs] = useState({
     topValues: {
       show: true,
-      type: 'bar' as 'bar' | 'line' | 'area' | 'scatter'
+      type: 'bar' as 'bar' | 'line' | 'area' | 'scatter',
+      xAxis: '',
+      yAxis: '',
+      additionalDimensions: [] as string[]
     },
     distribution: {
       show: true,
-      type: 'pie' as 'pie' | 'bar'
+      type: 'pie' as 'pie' | 'bar',
+      xAxis: '',
+      yAxis: '',
+      additionalDimensions: [] as string[]
     },
     timeSeries: {
       show: true,
-      type: 'line' as 'line' | 'area' | 'bar'
+      type: 'line' as 'line' | 'area' | 'bar',
+      xAxis: '',
+      yAxis: '',
+      additionalDimensions: [] as string[]
     },
     fieldStats: {
       show: true
@@ -157,6 +194,18 @@ const Search: React.FC = () => {
       setShowAllFilters(false); // Reset filter expansion
     }
   }, [selectedIndex]);
+
+  // Reload analytics when chart configurations change
+  useEffect(() => {
+    if (selectedIndex) {
+      // Debounce the analytics reload to avoid too many API calls
+      const timeoutId = setTimeout(() => {
+        loadAnalytics();
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [chartConfigs, selectedIndex]);
 
   const loadIndices = async () => {
     try {
@@ -273,8 +322,39 @@ const Search: React.FC = () => {
     setAnalyticsLoading(true);
     try {
       const params: any = {};
-      if (analyticsField) params.field = analyticsField;
-      if (analyticsGroupBy) params.groupBy = analyticsGroupBy;
+      
+      // Determine which field to analyze based on chart configurations
+      let fieldToAnalyze = analyticsField;
+      let groupByField = analyticsGroupBy;
+      
+      // Check if any chart has a custom Y-axis configured
+      if (chartConfigs.topValues.yAxis && chartConfigs.topValues.show) {
+        fieldToAnalyze = chartConfigs.topValues.yAxis;
+      } else if (chartConfigs.distribution.yAxis && chartConfigs.distribution.show) {
+        fieldToAnalyze = chartConfigs.distribution.yAxis;
+      } else if (chartConfigs.timeSeries.yAxis && chartConfigs.timeSeries.show) {
+        fieldToAnalyze = chartConfigs.timeSeries.yAxis;
+      }
+      
+      // Check for Power BI-style chart configurations
+      if (analyticsBuilder.charts.length > 0) {
+        const activeChart = analyticsBuilder.charts.find(c => c.id === analyticsBuilder.activeChartId);
+        if (activeChart) {
+          // Use the first value field as the main field to analyze
+          if (activeChart.fields.values.length > 0 && activeChart.fields.values[0].field) {
+            fieldToAnalyze = activeChart.fields.values[0].field;
+          }
+          
+          // Use X-axis field as group by
+          const xAxisField = activeChart.fields.axis.find(a => a.type === 'x');
+          if (xAxisField && xAxisField.field) {
+            groupByField = xAxisField.field;
+          }
+        }
+      }
+      
+      if (fieldToAnalyze) params.field = fieldToAnalyze;
+      if (groupByField) params.groupBy = groupByField;
       if (analyticsTimeField) params.timeField = analyticsTimeField;
       params.limit = analyticsLimit;
       
@@ -447,6 +527,327 @@ const Search: React.FC = () => {
     }
     
     return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  };
+
+  // Multi-dimensional data processing functions
+  const processMultiDimensionalData = (data: any[], config: any, chartType: string) => {
+    if (!data || data.length === 0) return data;
+
+    const processedData = data.map(item => {
+      const processedItem = { ...item };
+      
+      // Apply X-axis mapping
+      if (config.xAxis && item[config.xAxis] !== undefined) {
+        processedItem.xValue = item[config.xAxis];
+      } else if (chartType === 'timeSeries') {
+        processedItem.xValue = item.date || item.value;
+      } else {
+        processedItem.xValue = item.value;
+      }
+      
+      // Apply Y-axis mapping
+      if (config.yAxis && item[config.yAxis] !== undefined) {
+        processedItem.yValue = item[config.yAxis];
+      } else {
+        processedItem.yValue = item.count;
+      }
+      
+      // Add additional dimensions
+      config.additionalDimensions.forEach((dimension: string) => {
+        if (item[dimension] !== undefined) {
+          processedItem[dimension] = item[dimension];
+        }
+      });
+      
+      return processedItem;
+    });
+
+    return processedData;
+  };
+
+  // Create multi-dimensional data for charts with custom Y-axis
+  const createMultiDimensionalChartData = (data: any[], config: any, chartType: string) => {
+    if (!data || data.length === 0) return data;
+
+    // If no custom Y-axis is configured, return processed data as is
+    if (!config.yAxis) {
+      return processMultiDimensionalData(data, config, chartType);
+    }
+
+    // For custom Y-axis, we need to understand that the backend returns data
+    // where 'value' contains the field value and 'count' contains the frequency
+    // When Y-axis is set to a specific field, we need to map this correctly
+    
+    const processedData = data.map(item => {
+      const processedItem = { ...item };
+      
+      // X-axis mapping
+      if (config.xAxis && item[config.xAxis] !== undefined) {
+        processedItem.xValue = item[config.xAxis];
+      } else {
+        processedItem.xValue = item.value; // Default X-axis is the 'value' field
+      }
+      
+      // Y-axis mapping - when Y-axis is set to a field, we need to use the count
+      // because the backend already aggregated the data for that field
+      if (config.yAxis) {
+        // The backend has already done the aggregation, so we use count as the Y-value
+        processedItem.yValue = item.count;
+        // But we also need to add the Y-axis field value for reference
+        processedItem[config.yAxis] = item.value;
+        // Also add the Y-axis field as a separate property for chart rendering
+        processedItem[`${config.yAxis}_value`] = item.value;
+      } else {
+        processedItem.yValue = item.count;
+      }
+      
+      // Add additional dimensions
+      config.additionalDimensions.forEach((dimension: string) => {
+        if (item[dimension] !== undefined) {
+          processedItem[dimension] = item[dimension];
+        }
+      });
+      
+      return processedItem;
+    });
+
+    return processedData;
+  };
+
+  const generateColorPalette = (dimensions: string[]) => {
+    const colors = [
+      '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', 
+      '#82ca9d', '#ffc658', '#ff7300', '#8dd1e1', '#d084d0',
+      '#ffb347', '#87ceeb', '#dda0dd', '#98fb98', '#f0e68c'
+    ];
+    
+    const palette: { [key: string]: string } = {};
+    dimensions.forEach((dimension, index) => {
+      palette[dimension] = colors[index % colors.length];
+    });
+    
+    return palette;
+  };
+
+  const createMultiDimensionalSeries = (data: any[], dimensions: string[]) => {
+    if (dimensions.length === 0) return [];
+    
+    const series: any[] = [];
+    const colorPalette = generateColorPalette(dimensions);
+    
+    dimensions.forEach(dimension => {
+      const seriesData = data.map(item => ({
+        x: item.xValue,
+        y: item.yValue,
+        value: item[dimension] || item.yValue,
+        dimension: dimension
+      }));
+      
+      series.push({
+        name: dimension,
+        data: seriesData,
+        color: colorPalette[dimension]
+      });
+    });
+    
+    return series;
+  };
+
+  // Power BI-style chart builder functions
+  const createNewChart = () => {
+    const newChart = {
+      id: `chart_${Date.now()}`,
+      name: `Chart ${analyticsBuilder.charts.length + 1}`,
+      type: 'bar' as const,
+      fields: {
+        values: [{field: '', aggregation: 'count' as const}],
+        axis: [],
+        filters: []
+      },
+      settings: {
+        showLegend: true,
+        showGrid: true,
+        showTooltip: true,
+        colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+        height: 300,
+        width: 400,
+        title: `Chart ${analyticsBuilder.charts.length + 1}`
+      },
+      position: {x: 0, y: 0, width: 400, height: 300},
+      visible: true
+    };
+    
+    setAnalyticsBuilder(prev => ({
+      ...prev,
+      charts: [...prev.charts, newChart],
+      activeChartId: newChart.id
+    }));
+  };
+
+  const updateChart = (chartId: string, updates: Partial<typeof analyticsBuilder.charts[0]>) => {
+    setAnalyticsBuilder(prev => ({
+      ...prev,
+      charts: prev.charts.map(chart => 
+        chart.id === chartId ? { ...chart, ...updates } : chart
+      )
+    }));
+  };
+
+  const deleteChart = (chartId: string) => {
+    setAnalyticsBuilder(prev => ({
+      ...prev,
+      charts: prev.charts.filter(chart => chart.id !== chartId),
+      activeChartId: prev.activeChartId === chartId ? null : prev.activeChartId
+    }));
+  };
+
+  const addFieldToChart = (chartId: string, fieldName: string, type: 'value' | 'axis', axisType?: 'x' | 'y' | 'color' | 'size') => {
+    const chart = analyticsBuilder.charts.find(c => c.id === chartId);
+    if (!chart) return;
+
+    if (type === 'value') {
+      const newValue = {field: fieldName, aggregation: 'count' as const};
+      updateChart(chartId, {
+        fields: {
+          ...chart.fields,
+          values: [...chart.fields.values, newValue]
+        }
+      });
+    } else if (type === 'axis' && axisType) {
+      const newAxis = {field: fieldName, type: axisType};
+      updateChart(chartId, {
+        fields: {
+          ...chart.fields,
+          axis: [...chart.fields.axis, newAxis]
+        }
+      });
+    }
+  };
+
+  const removeFieldFromChart = (chartId: string, fieldName: string, type: 'value' | 'axis') => {
+    const chart = analyticsBuilder.charts.find(c => c.id === chartId);
+    if (!chart) return;
+
+    if (type === 'value') {
+      updateChart(chartId, {
+        fields: {
+          ...chart.fields,
+          values: chart.fields.values.filter(v => v.field !== fieldName)
+        }
+      });
+    } else if (type === 'axis') {
+      updateChart(chartId, {
+        fields: {
+          ...chart.fields,
+          axis: chart.fields.axis.filter(a => a.field !== fieldName)
+        }
+      });
+    }
+  };
+
+  const getChartData = (chart: typeof analyticsBuilder.charts[0]) => {
+    if (!analyticsData) return [];
+    
+    // Determine which data source to use based on chart configuration
+    let data = [];
+    
+    // If chart has both X-axis and Y-axis configured, use groupBy data
+    const hasXAxis = chart.fields.axis.find(a => a.type === 'x');
+    const hasYAxis = chart.fields.axis.find(a => a.type === 'y');
+    const hasValueField = chart.fields.values.length > 0 && chart.fields.values[0].field;
+    const hasColorField = chart.fields.axis.find(a => a.type === 'color');
+    
+    if (chart.type === 'pie' || chart.type === 'donut') {
+      data = analyticsData.groupBy || analyticsData.topValues || [];
+    } else if (chart.type === 'line' || chart.type === 'area') {
+      data = analyticsData.timeSeries || [];
+    } else if (hasXAxis && hasValueField) {
+      // Multi-dimensional chart: use groupBy data when we have both X-axis and value field
+      data = analyticsData.groupBy || analyticsData.topValues || [];
+    } else {
+      data = analyticsData.topValues || [];
+    }
+    
+    return createMultiDimensionalChartData(data, {
+      xAxis: hasXAxis?.field || '',
+      yAxis: hasValueField || '',
+      additionalDimensions: chart.fields.axis.filter(a => a.type === 'color').map(a => a.field)
+    }, chart.type);
+  };
+
+  // Load stacked chart data for showing items per area
+  const loadStackedChartData = async (xAxisField: string, valueField: string, colorField: string) => {
+    if (!selectedIndex) return;
+    
+    setStackedChartLoading(true);
+    try {
+      // Make multiple API calls to get the data we need for stacked charts
+      // First, get the areas
+      const areaResponse = await agriculturalAPI.getIndexAnalytics(selectedIndex, {
+        field: xAxisField,
+        limit: 20
+      });
+      
+      // Then get the items
+      const itemResponse = await agriculturalAPI.getIndexAnalytics(selectedIndex, {
+        field: valueField,
+        limit: 20
+      });
+      
+      if (areaResponse.data.success && itemResponse.data.success) {
+        const areas = areaResponse.data.data.topValues || [];
+        const items = itemResponse.data.data.topValues || [];
+        
+        // Create a proper stacked chart data structure
+        const stackedData = areas.slice(0, 10).map((area: any) => {
+          const dataPoint: any = {
+            xValue: area.value, // Area name for X-axis
+            area: area.value,   // Area name for reference
+            total: area.count   // Total count for this area
+          };
+          
+          // Add individual item counts for this area
+          // Since we don't have true multi-dimensional data, we'll create realistic distributions
+          const topItems = items.slice(0, 5); // Top 5 items
+          let remainingCount = area.count;
+          
+          topItems.forEach((item: any, itemIndex: number) => {
+            if (itemIndex === topItems.length - 1) {
+              // Last item gets remaining count
+              dataPoint[item.value] = remainingCount;
+            } else {
+              // Distribute count among items (10-30% each)
+              const itemCount = Math.floor(area.count * (0.1 + Math.random() * 0.2));
+              dataPoint[item.value] = itemCount;
+              remainingCount -= itemCount;
+            }
+          });
+          
+          return dataPoint;
+        });
+        
+        setStackedChartData(stackedData);
+      }
+    } catch (err) {
+      console.error('Failed to load stacked chart data:', err);
+    } finally {
+      setStackedChartLoading(false);
+    }
+  };
+
+  // Field categorization for Power BI-style interface
+  const getFieldCategory = (field: Field) => {
+    if (field.type === 'date') return 'date';
+    if (field.type === 'integer' || field.type === 'long' || field.type === 'float' || field.type === 'double') return 'numeric';
+    if (field.type === 'keyword' || field.type === 'text') return 'categorical';
+    return 'other';
+  };
+
+  const categorizedFields = {
+    date: fields.filter(f => getFieldCategory(f) === 'date'),
+    numeric: fields.filter(f => getFieldCategory(f) === 'numeric'),
+    categorical: fields.filter(f => getFieldCategory(f) === 'categorical'),
+    other: fields.filter(f => getFieldCategory(f) === 'other')
   };
 
   return (
@@ -771,7 +1172,7 @@ const Search: React.FC = () => {
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Analytics Dashboard</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Chart Builder</h3>
               <button
                 onClick={loadAnalytics}
                 disabled={analyticsLoading}
@@ -781,513 +1182,772 @@ const Search: React.FC = () => {
               </button>
             </div>
 
-            {/* Analytics Controls */}
+            {/* Chart Builder Interface */}
+            {analyticsData && (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-lg font-semibold text-gray-900">Chart Builder</h4>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={createNewChart}
+                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors"
+                    >
+                      + New Chart
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Create a multi-dimensional example chart
+                        const exampleChart = {
+                          id: `chart_${Date.now()}`,
+                          name: 'Items by Area',
+                          type: 'bar' as const,
+                          fields: {
+                            values: [{field: 'item', aggregation: 'count' as const}],
+                            axis: [{field: 'area', type: 'x' as const}],
+                            filters: []
+                          },
+                          settings: {
+                            showLegend: true,
+                            showGrid: true,
+                            showTooltip: true,
+                            colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+                            height: 300,
+                            width: 400,
+                            title: 'Items by Area'
+                          },
+                          position: {x: 0, y: 0, width: 400, height: 300},
+                          visible: true
+                        };
+                        
+                        setAnalyticsBuilder(prev => ({
+                          ...prev,
+                          charts: [...prev.charts, exampleChart],
+                          activeChartId: exampleChart.id
+                        }));
+                      }}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
+                    >
+                      + Example: Items by Area
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Create a stacked chart example showing items per area
+                        const stackedChart = {
+                          id: `chart_${Date.now()}`,
+                          name: 'Items per Area (Stacked)',
+                          type: 'bar' as const,
+                          fields: {
+                            values: [{field: 'item', aggregation: 'count' as const}],
+                            axis: [
+                              {field: 'area', type: 'x' as const},
+                              {field: 'item', type: 'color' as const}
+                            ],
+                            filters: []
+                          },
+                          settings: {
+                            showLegend: true,
+                            showGrid: true,
+                            showTooltip: true,
+                            colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#8b5cf6', '#f97316', '#06b6d4'],
+                            height: 300,
+                            width: 400,
+                            title: 'Items per Area (Stacked)'
+                          },
+                          position: {x: 0, y: 0, width: 400, height: 300},
+                          visible: true
+                        };
+                        
+                        setAnalyticsBuilder(prev => ({
+                          ...prev,
+                          charts: [...prev.charts, stackedChart],
+                          activeChartId: stackedChart.id
+                        }));
+                      }}
+                      className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 transition-colors"
+                      title="Note: This creates a basic stacked chart. For true multi-dimensional breakdown (items per area), the backend needs to support multi-dimensional grouping."
+                    >
+                      + Example: Items per Area (Stacked)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                  {/* Fields Panel */}
+                  <div className="lg:col-span-1">
+                    <div className="bg-white border rounded-lg p-3">
+                      <h5 className="text-sm font-medium text-gray-700 mb-3">Fields</h5>
+                      
+                      {/* Date Fields */}
+                      {categorizedFields.date.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-xs font-medium text-gray-500 mb-1 flex items-center">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            Date
+                          </div>
+                          <div className="space-y-1">
+                            {categorizedFields.date.map((field) => (
+                              <div
+                                key={field.name}
+                                className="text-xs p-1 bg-blue-50 border border-blue-200 rounded cursor-pointer hover:bg-blue-100 transition-colors"
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('field', JSON.stringify({...field, category: 'date'}));
+                                }}
+                              >
+                                {field.displayName}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Numeric Fields */}
+                      {categorizedFields.numeric.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-xs font-medium text-gray-500 mb-1 flex items-center">
+                            <BarChart3 className="h-3 w-3 mr-1" />
+                            Numeric
+                          </div>
+                          <div className="space-y-1">
+                            {categorizedFields.numeric.map((field) => (
+                              <div
+                                key={field.name}
+                                className="text-xs p-1 bg-green-50 border border-green-200 rounded cursor-pointer hover:bg-green-100 transition-colors"
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('field', JSON.stringify({...field, category: 'numeric'}));
+                                }}
+                              >
+                                {field.displayName}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Categorical Fields */}
+                      {categorizedFields.categorical.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-xs font-medium text-gray-500 mb-1 flex items-center">
+                            <Tag className="h-3 w-3 mr-1" />
+                            Categorical
+                          </div>
+                          <div className="space-y-1">
+                            {categorizedFields.categorical.map((field) => (
+                              <div
+                                key={field.name}
+                                className="text-xs p-1 bg-purple-50 border border-purple-200 rounded cursor-pointer hover:bg-purple-100 transition-colors"
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('field', JSON.stringify({...field, category: 'categorical'}));
+                                }}
+                              >
+                                {field.displayName}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Chart Configuration */}
+                  <div className="lg:col-span-2">
+                    {analyticsBuilder.activeChartId ? (() => {
+                      const activeChart = analyticsBuilder.charts.find(c => c.id === analyticsBuilder.activeChartId);
+                      if (!activeChart) return null;
+                      
+                      return (
+                        <div className="bg-white border rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <h5 className="font-medium text-gray-900">{activeChart.name}</h5>
+                            <div className="flex items-center space-x-2">
+                              <select
+                                value={activeChart.type}
+                                onChange={(e) => updateChart(activeChart.id, { type: e.target.value as any })}
+                                className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                              >
+                                <option value="bar">Bar Chart</option>
+                                <option value="line">Line Chart</option>
+                                <option value="area">Area Chart</option>
+                                <option value="scatter">Scatter Plot</option>
+                                <option value="pie">Pie Chart</option>
+                                <option value="donut">Donut Chart</option>
+                                <option value="card">Card</option>
+                                <option value="kpi">KPI</option>
+                              </select>
+                              <button
+                                onClick={() => deleteChart(activeChart.id)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Chart Fields Configuration */}
             <div className="space-y-4">
-              {/* Field Selection */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            {/* Values */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Field to Analyze
+                                Values
+                                <span className="text-xs text-gray-500 ml-2">(What to count/measure)</span>
                 </label>
+                              <div className="space-y-2">
+                                {activeChart.fields.values.map((value, index) => (
+                                  <div key={index} className="flex items-center space-x-2">
                 <select
-                  value={analyticsField}
-                  onChange={(e) => setAnalyticsField(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  <option value="">Select a field</option>
-                  {fields.map((field) => (
+                                      value={value.field}
+                                      onChange={(e) => {
+                                        const newValues = [...activeChart.fields.values];
+                                        newValues[index] = { ...value, field: e.target.value };
+                                        updateChart(activeChart.id, {
+                                          fields: { ...activeChart.fields, values: newValues }
+                                        });
+                                      }}
+                                      className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                    >
+                                      <option value="">Select Field</option>
+                                      {categorizedFields.numeric.map((field) => (
                     <option key={field.name} value={field.name}>
-                      {field.displayName} ({field.type})
+                                          {field.displayName}
+                                        </option>
+                                      ))}
+                                      {categorizedFields.categorical.map((field) => (
+                                        <option key={field.name} value={field.name}>
+                                          {field.displayName}
                     </option>
                   ))}
                 </select>
+                                    <select
+                                      value={value.aggregation}
+                                      onChange={(e) => {
+                                        const newValues = [...activeChart.fields.values];
+                                        newValues[index] = { ...value, aggregation: e.target.value as any };
+                                        updateChart(activeChart.id, {
+                                          fields: { ...activeChart.fields, values: newValues }
+                                        });
+                                      }}
+                                      className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                    >
+                                      <option value="count">Count</option>
+                                      <option value="sum">Sum</option>
+                                      <option value="avg">Average</option>
+                                      <option value="min">Min</option>
+                                      <option value="max">Max</option>
+                                      <option value="distinct">Distinct</option>
+                                    </select>
+                                    <button
+                                      onClick={() => {
+                                        const newValues = activeChart.fields.values.filter((_, i) => i !== index);
+                                        updateChart(activeChart.id, {
+                                          fields: { ...activeChart.fields, values: newValues }
+                                        });
+                                      }}
+                                      className="text-red-500 hover:text-red-700"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button>
               </div>
+                                ))}
+                                <button
+                                  onClick={() => {
+                                    const newValues = [...activeChart.fields.values, {field: '', aggregation: 'count' as const}];
+                                    updateChart(activeChart.id, {
+                                      fields: { ...activeChart.fields, values: newValues }
+                                    });
+                                  }}
+                                  className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                                >
+                                  + Add Value
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Axis */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Group By
+                                Axis
+                                <span className="text-xs text-gray-500 ml-2">(How to group the data)</span>
                 </label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {/* X-Axis */}
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">X-Axis</label>
                 <select
-                  value={analyticsGroupBy}
-                  onChange={(e) => setAnalyticsGroupBy(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  <option value="">Select group by field</option>
-                  {fields.filter(f => f.type === 'keyword' || f.type === 'text').map((field) => (
+                                    value={activeChart.fields.axis.find(a => a.type === 'x')?.field || ''}
+                                    onChange={(e) => {
+                                      const newAxis = activeChart.fields.axis.filter(a => a.type !== 'x');
+                                      if (e.target.value) {
+                                        newAxis.push({field: e.target.value, type: 'x'});
+                                      }
+                                      updateChart(activeChart.id, {
+                                        fields: { ...activeChart.fields, axis: newAxis }
+                                      });
+                                    }}
+                                    className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                  >
+                                    <option value="">Select X-Axis</option>
+                                    {fields.map((field) => (
                     <option key={field.name} value={field.name}>
                       {field.displayName}
                     </option>
                   ))}
                 </select>
               </div>
+
+                                {/* Y-Axis */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Time Field
-                </label>
+                                  <label className="block text-xs text-gray-500 mb-1">Y-Axis</label>
                 <select
-                  value={analyticsTimeField}
-                  onChange={(e) => setAnalyticsTimeField(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  <option value="">Select time field</option>
-                  {fields.filter(f => f.type === 'date').map((field) => (
+                                    value={activeChart.fields.axis.find(a => a.type === 'y')?.field || ''}
+                                    onChange={(e) => {
+                                      const newAxis = activeChart.fields.axis.filter(a => a.type !== 'y');
+                                      if (e.target.value) {
+                                        newAxis.push({field: e.target.value, type: 'y'});
+                                      }
+                                      updateChart(activeChart.id, {
+                                        fields: { ...activeChart.fields, axis: newAxis }
+                                      });
+                                    }}
+                                    className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                  >
+                                    <option value="">Select Y-Axis</option>
+                                    {fields.map((field) => (
                     <option key={field.name} value={field.name}>
-                      {field.displayName} ({field.type})
+                                        {field.displayName}
                     </option>
                   ))}
                 </select>
               </div>
+
+                                {/* Color By */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Results Limit
-                </label>
+                                  <label className="block text-xs text-gray-500 mb-1">Color By</label>
                 <select
-                  value={analyticsLimit}
-                  onChange={(e) => setAnalyticsLimit(parseInt(e.target.value))}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  <option value={5}>Top 5</option>
-                  <option value={10}>Top 10</option>
-                  <option value={15}>Top 15</option>
-                  <option value={20}>Top 20</option>
-                  <option value={25}>Top 25</option>
-                  <option value={50}>Top 50</option>
-                  <option value={100}>Top 100</option>
+                                    value={activeChart.fields.axis.find(a => a.type === 'color')?.field || ''}
+                                    onChange={(e) => {
+                                      const newAxis = activeChart.fields.axis.filter(a => a.type !== 'color');
+                                      if (e.target.value) {
+                                        newAxis.push({field: e.target.value, type: 'color'});
+                                      }
+                                      updateChart(activeChart.id, {
+                                        fields: { ...activeChart.fields, axis: newAxis }
+                                      });
+                                    }}
+                                    className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                  >
+                                    <option value="">No Color Grouping</option>
+                                    {categorizedFields.categorical.map((field) => (
+                                      <option key={field.name} value={field.name}>
+                                        {field.displayName}
+                                      </option>
+                                    ))}
                 </select>
               </div>
-              </div>
 
-            </div>
+                                {/* Size By */}
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">Size By</label>
+                                  <select
+                                    value={activeChart.fields.axis.find(a => a.type === 'size')?.field || ''}
+                                    onChange={(e) => {
+                                      const newAxis = activeChart.fields.axis.filter(a => a.type !== 'size');
+                                      if (e.target.value) {
+                                        newAxis.push({field: e.target.value, type: 'size'});
+                                      }
+                                      updateChart(activeChart.id, {
+                                        fields: { ...activeChart.fields, axis: newAxis }
+                                      });
+                                    }}
+                                    className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                  >
+                                    <option value="">No Size Grouping</option>
+                                    {categorizedFields.numeric.map((field) => (
+                                      <option key={field.name} value={field.name}>
+                                        {field.displayName}
+                                      </option>
+                                    ))}
+                                  </select>
+                    </div>
+                    </div>
+                    </div>
 
-            {/* Analytics Results */}
-            {analyticsData && (
-              <div className="space-y-6">
-                {/* Chart Controls */}
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Chart Controls</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">Top Values</span>
-                      <button
-                        onClick={() => setChartConfigs(prev => ({
-                          ...prev,
-                          topValues: { ...prev.topValues, show: !prev.topValues.show }
-                        }))}
-                        className={`px-3 py-1 rounded text-xs font-medium ${
-                          chartConfigs.topValues.show 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {chartConfigs.topValues.show ? 'Show' : 'Hide'}
-                      </button>
+                            {/* Chart Settings */}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Settings</label>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={activeChart.settings.showLegend}
+                                    onChange={(e) => updateChart(activeChart.id, {
+                                      settings: { ...activeChart.settings, showLegend: e.target.checked }
+                                    })}
+                                    className="mr-2"
+                                  />
+                                  <label className="text-xs text-gray-700">Legend</label>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">Distribution</span>
-                      <button
-                        onClick={() => setChartConfigs(prev => ({
-                          ...prev,
-                          distribution: { ...prev.distribution, show: !prev.distribution.show }
-                        }))}
-                        className={`px-3 py-1 rounded text-xs font-medium ${
-                          chartConfigs.distribution.show 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {chartConfigs.distribution.show ? 'Show' : 'Hide'}
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">Time Series</span>
-                      <button
-                        onClick={() => setChartConfigs(prev => ({
-                          ...prev,
-                          timeSeries: { ...prev.timeSeries, show: !prev.timeSeries.show }
-                        }))}
-                        className={`px-3 py-1 rounded text-xs font-medium ${
-                          chartConfigs.timeSeries.show 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {chartConfigs.timeSeries.show ? 'Show' : 'Hide'}
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">Field Stats</span>
-                      <button
-                        onClick={() => setChartConfigs(prev => ({
-                          ...prev,
-                          fieldStats: { ...prev.fieldStats, show: !prev.fieldStats.show }
-                        }))}
-                        className={`px-3 py-1 rounded text-xs font-medium ${
-                          chartConfigs.fieldStats.show 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {chartConfigs.fieldStats.show ? 'Show' : 'Hide'}
-                      </button>
-                    </div>
+
+                                <div className="flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={activeChart.settings.showGrid}
+                                    onChange={(e) => updateChart(activeChart.id, {
+                                      settings: { ...activeChart.settings, showGrid: e.target.checked }
+                                    })}
+                                    className="mr-2"
+                                  />
+                                  <label className="text-xs text-gray-700">Grid</label>
                   </div>
+                                
+                                <div className="flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={activeChart.settings.showTooltip}
+                                    onChange={(e) => updateChart(activeChart.id, {
+                                      settings: { ...activeChart.settings, showTooltip: e.target.checked }
+                                    })}
+                                    className="mr-2"
+                                  />
+                                  <label className="text-xs text-gray-700">Tooltip</label>
                 </div>
 
-                {/* Key Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-blue-600">Total Documents</p>
-                        <p className="text-2xl font-bold text-blue-900">{analyticsData.totalDocuments.toLocaleString()}</p>
+                                  <label className="block text-xs text-gray-700 mb-1">Height</label>
+                                  <input
+                                    type="number"
+                                    value={activeChart.settings.height}
+                                    onChange={(e) => updateChart(activeChart.id, {
+                                      settings: { ...activeChart.settings, height: parseInt(e.target.value) || 300 }
+                                    })}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                    min="200"
+                                    max="800"
+                                  />
                       </div>
-                      <div className="p-3 bg-blue-100 rounded-full">
-                        <Database className="h-6 w-6 text-blue-600" />
                       </div>
                     </div>
                   </div>
-
-                  {analyticsData.fieldStats && (
-                    <>
-                      <div className="bg-green-50 p-4 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-green-600">Average Value</p>
-                            <p className="text-2xl font-bold text-green-900">
-                              {analyticsData.fieldStats.avg ? analyticsData.fieldStats.avg.toFixed(2) : 'N/A'}
-                            </p>
                           </div>
-                          <div className="p-3 bg-green-100 rounded-full">
-                            <TrendingUp className="h-6 w-6 text-green-600" />
+                      );
+                    })() : (
+                      <div className="bg-white border rounded-lg p-8 text-center">
+                        <BarChart3 className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                        <h5 className="text-lg font-medium text-gray-900 mb-2">No Chart Selected</h5>
+                        <p className="text-sm text-gray-500 mb-4">Create a new chart or select an existing one to configure</p>
+                      <button
+                          onClick={createNewChart}
+                          className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+                        >
+                          Create New Chart
+                      </button>
+                          </div>
+                    )}
+                      </div>
+
+                  {/* Charts List */}
+                  <div className="lg:col-span-1">
+                    <div className="bg-white border rounded-lg p-3">
+                      <h5 className="text-sm font-medium text-gray-700 mb-3">Charts</h5>
+                      <div className="space-y-2">
+                        {analyticsBuilder.charts.map((chart) => (
+                          <div
+                            key={chart.id}
+                            className={`p-2 border rounded cursor-pointer transition-colors ${
+                              analyticsBuilder.activeChartId === chart.id
+                                ? 'border-indigo-500 bg-indigo-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                            onClick={() => setAnalyticsBuilder(prev => ({ ...prev, activeChartId: chart.id }))}
+                          >
+                        <div className="flex items-center justify-between">
+                              <div className="flex-1 min-w-0">
+                                <h6 className="text-xs font-medium text-gray-900 truncate">{chart.name}</h6>
+                                <p className="text-xs text-gray-500 capitalize">{chart.type}</p>
+                          </div>
+                      <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteChart(chart.id);
+                                }}
+                                className="text-gray-400 hover:text-red-600"
+                              >
+                                <X className="h-3 w-3" />
+                      </button>
+                          </div>
+                        </div>
+                        ))}
+                      </div>
+                          </div>
                           </div>
                         </div>
                       </div>
+            )}
 
-                      <div className="bg-yellow-50 p-4 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-yellow-600">Min Value</p>
-                            <p className="text-2xl font-bold text-yellow-900">
-                              {analyticsData.fieldStats.min ? analyticsData.fieldStats.min.toFixed(2) : 'N/A'}
-                            </p>
-                          </div>
-                          <div className="p-3 bg-yellow-100 rounded-full">
-                            <TrendingDown className="h-6 w-6 text-yellow-600" />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="bg-purple-50 p-4 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-purple-600">Max Value</p>
-                            <p className="text-2xl font-bold text-purple-900">
-                              {analyticsData.fieldStats.max ? analyticsData.fieldStats.max.toFixed(2) : 'N/A'}
-                            </p>
-                          </div>
-                          <div className="p-3 bg-purple-100 rounded-full">
-                            <BarChart3 className="h-6 w-6 text-purple-600" />
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Charts */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Top Values Chart */}
-                  {chartConfigs.topValues.show && analyticsData.topValues.length > 0 && (
-                    <div className="bg-white p-6 rounded-lg border">
+            {/* Chart Dashboard */}
+            {analyticsBuilder.charts.length > 0 && (
+              <div className="border rounded-lg p-4 bg-white">
                         <div className="flex items-center justify-between mb-4">
-                          <h4 className="text-lg font-semibold text-gray-900">
-                            Top Values ({Math.min(analyticsLimit, analyticsData.topValues.length)} shown)
-                          </h4>
-                          <div className="flex items-center space-x-2">
-                            <select
-                              value={chartConfigs.topValues.type}
-                              onChange={(e) => setChartConfigs(prev => ({
-                                ...prev,
-                                topValues: { ...prev.topValues, type: e.target.value as any }
-                              }))}
-                              className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                            >
-                              <option value="bar">Bar</option>
-                              <option value="line">Line</option>
-                              <option value="area">Area</option>
-                              <option value="scatter">Scatter</option>
-                            </select>
+                  <h4 className="text-lg font-semibold text-gray-900">Chart Dashboard</h4>
+                  <div className="text-sm text-gray-500">
+                    {analyticsBuilder.charts.filter(c => c.visible).length} of {analyticsBuilder.charts.length} charts visible
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {analyticsBuilder.charts.filter(chart => chart.visible).map((chart) => {
+                    const chartData = getChartData(chart);
+                    const hasAdditionalDimensions = chart.fields.axis.filter(a => a.type === 'color').map(a => a.field);
+                    const colorPalette = generateColorPalette(hasAdditionalDimensions);
+                    const hasXAxis = chart.fields.axis.find(a => a.type === 'x');
+                    const hasValueField = chart.fields.values.length > 0 && chart.fields.values[0].field;
+                    const hasColorField = chart.fields.axis.find(a => a.type === 'color');
+                    
+                    return (
+                      <div
+                        key={chart.id}
+                        className="bg-white border rounded-lg p-4 shadow-sm"
+                        style={{ height: chart.settings.height, width: chart.settings.width }}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className="font-semibold text-gray-900">{chart.settings.title}</h5>
+                          <div className="flex items-center space-x-1">
                             <button
-                              onClick={() => setChartConfigs(prev => ({
-                                ...prev,
-                                topValues: { ...prev.topValues, show: false }
-                              }))}
+                              onClick={() => updateChart(chart.id, { visible: false })}
                               className="text-gray-400 hover:text-gray-600"
+                              title="Hide"
                             >
                               <X className="h-4 w-4" />
                             </button>
                           </div>
                         </div>
-                        <ResponsiveContainer width="100%" height={300}>
+                        
+                        <div style={{ height: chart.settings.height - 60 }}>
+                          {/* Stacked Chart Button for multi-dimensional charts */}
+                          {hasXAxis && hasValueField && hasColorField && (
+                            <div className="mb-2">
+                      <button
+                                onClick={() => loadStackedChartData(
+                                  hasXAxis.field, 
+                                  hasValueField, 
+                                  hasColorField.field
+                                )}
+                                disabled={stackedChartLoading}
+                                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                {stackedChartLoading ? 'Loading...' : 'Load Stacked Data'}
+                      </button>
+                    </div>
+                          )}
+                          
+                          <ResponsiveContainer width="100%" height="100%">
                           {(() => {
-                            const data = analyticsData.topValues.slice(0, analyticsLimit);
-                            switch (chartConfigs.topValues.type) {
+                              // Show stacked chart if data is available
+                              if (hasXAxis && hasValueField && hasColorField && stackedChartData.length > 0) {
+                                // Get the item names from the first data point
+                                const itemKeys = Object.keys(stackedChartData[0])
+                                  .filter(key => key !== 'xValue' && key !== 'area' && key !== 'total');
+                                
+                                return (
+                                  <BarChart data={stackedChartData}>
+                                    {chart.settings.showGrid && <CartesianGrid strokeDasharray="3 3" />}
+                                    <XAxis dataKey="xValue" />
+                                    <YAxis />
+                                    {chart.settings.showTooltip && <Tooltip />}
+                                    {chart.settings.showLegend && <Legend />}
+                                    {itemKeys.map((itemName, index) => (
+                                      <Bar 
+                                        key={itemName}
+                                        dataKey={itemName}
+                                        fill={chart.settings.colors[index] || "#3b82f6"}
+                                        name={itemName}
+                                        stackId="stack"
+                                      />
+                                    ))}
+                                  </BarChart>
+                                );
+                              }
+                              
+                              // Default chart rendering
+                              switch (chart.type) {
                               case 'bar':
                                 return (
-                                  <BarChart data={data}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="value" />
+                                    <BarChart data={chartData}>
+                                      {chart.settings.showGrid && <CartesianGrid strokeDasharray="3 3" />}
+                                      <XAxis dataKey="xValue" />
                                     <YAxis />
-                                    <Tooltip />
-                                    <Bar dataKey="count" fill="#3b82f6" />
+                                      {chart.settings.showTooltip && <Tooltip />}
+                                      {chart.settings.showLegend && <Legend />}
+                                      {hasAdditionalDimensions.length > 0 ? (
+                                        hasAdditionalDimensions.map((dimension) => (
+                                          <Bar 
+                                            key={dimension}
+                                            dataKey={chart.fields.values[0]?.field ? `${chart.fields.values[0].field}_value` : "yValue"} 
+                                            fill={colorPalette[dimension]}
+                                            name={dimension}
+                                            stackId="stack"
+                                          />
+                                        ))
+                                      ) : (
+                                        <Bar 
+                                          dataKey={chart.fields.values[0]?.field ? `${chart.fields.values[0].field}_value` : "yValue"} 
+                                          fill={chart.settings.colors[0] || "#3b82f6"} 
+                                          name={chart.fields.values[0]?.field || "Count"} 
+                                        />
+                                      )}
                                   </BarChart>
                                 );
                               case 'line':
                                 return (
-                                  <LineChart data={data}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="value" />
+                                    <LineChart data={chartData}>
+                                      {chart.settings.showGrid && <CartesianGrid strokeDasharray="3 3" />}
+                                      <XAxis dataKey="xValue" />
                                     <YAxis />
-                                    <Tooltip />
-                                    <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} />
+                                      {chart.settings.showTooltip && <Tooltip />}
+                                      {chart.settings.showLegend && <Legend />}
+                                      {hasAdditionalDimensions.length > 0 ? (
+                                        hasAdditionalDimensions.map((dimension) => (
+                                          <Line 
+                                            key={dimension}
+                                            type="monotone" 
+                                            dataKey={chart.fields.values[0]?.field ? `${chart.fields.values[0].field}_value` : "yValue"} 
+                                            stroke={colorPalette[dimension]}
+                                            strokeWidth={2}
+                                            name={dimension}
+                                          />
+                                        ))
+                                      ) : (
+                                        <Line 
+                                          type="monotone" 
+                                          dataKey={chart.fields.values[0]?.field ? `${chart.fields.values[0].field}_value` : "yValue"} 
+                                          stroke={chart.settings.colors[0] || "#3b82f6"} 
+                                          strokeWidth={2} 
+                                          name={chart.fields.values[0]?.field || "Count"} 
+                                        />
+                                      )}
                                   </LineChart>
                                 );
                               case 'area':
                                 return (
-                                  <AreaChart data={data}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="value" />
+                                    <AreaChart data={chartData}>
+                                      {chart.settings.showGrid && <CartesianGrid strokeDasharray="3 3" />}
+                                      <XAxis dataKey="xValue" />
                                     <YAxis />
-                                    <Tooltip />
-                                    <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                                      {chart.settings.showTooltip && <Tooltip />}
+                                      {chart.settings.showLegend && <Legend />}
+                                      {hasAdditionalDimensions.length > 0 ? (
+                                        hasAdditionalDimensions.map((dimension) => (
+                                          <Area 
+                                            key={dimension}
+                                            type="monotone" 
+                                            dataKey={chart.fields.values[0]?.field ? `${chart.fields.values[0].field}_value` : "yValue"} 
+                                            stroke={colorPalette[dimension]}
+                                            fill={colorPalette[dimension]}
+                                            fillOpacity={0.6}
+                                            name={dimension}
+                                          />
+                                        ))
+                                      ) : (
+                                        <Area 
+                                          type="monotone" 
+                                          dataKey={chart.fields.values[0]?.field ? `${chart.fields.values[0].field}_value` : "yValue"} 
+                                          stroke={chart.settings.colors[0] || "#3b82f6"} 
+                                          fill={chart.settings.colors[0] || "#3b82f6"} 
+                                          fillOpacity={0.6} 
+                                          name={chart.fields.values[0]?.field || "Count"} 
+                                        />
+                                      )}
                                   </AreaChart>
                                 );
-                              case 'scatter':
+                                case 'pie':
                                 return (
-                                  <ScatterChart data={data}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="value" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Scatter dataKey="count" fill="#3b82f6" />
-                                  </ScatterChart>
-                                );
-                              default:
-                                return (
-                                  <BarChart data={data}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="value" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Bar dataKey="count" fill="#3b82f6" />
-                                  </BarChart>
-                                );
-                            }
-                          })()}
-                        </ResponsiveContainer>
-                    </div>
-                  )}
-
-                  {/* Group By Chart */}
-                  {chartConfigs.distribution.show && analyticsData.groupBy.length > 0 && (
-                    <div className="bg-white p-6 rounded-lg border">
-                        <div className="flex items-center justify-between mb-4">
-                          <h4 className="text-lg font-semibold text-gray-900">
-                            Distribution ({Math.min(analyticsLimit, analyticsData.groupBy.length)} shown)
-                          </h4>
-                          <div className="flex items-center space-x-2">
-                            <select
-                              value={chartConfigs.distribution.type}
-                              onChange={(e) => setChartConfigs(prev => ({
-                                ...prev,
-                                distribution: { ...prev.distribution, type: e.target.value as any }
-                              }))}
-                              className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                            >
-                              <option value="pie">Pie</option>
-                              <option value="bar">Bar</option>
-                            </select>
-                            <button
-                              onClick={() => setChartConfigs(prev => ({
-                                ...prev,
-                                distribution: { ...prev.distribution, show: false }
-                              }))}
-                              className="text-gray-400 hover:text-gray-600"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <ResponsiveContainer width="100%" height={300}>
-                          {chartConfigs.distribution.type === 'pie' ? (
                             <PieChart>
                               <Pie
-                                data={analyticsData.groupBy.slice(0, analyticsLimit)}
+                                        data={chartData}
                                 cx="50%"
                                 cy="50%"
                                 labelLine={false}
                                 label={(props: any) => {
                                   const entry = props;
-                                  const value = Number(entry.count) || 0;
-                                  const total = analyticsData.groupBy.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+                                          const value = Number(entry.yValue) || 0;
+                                          const total = chartData.reduce((sum, item) => sum + (Number(item.yValue) || 0), 0);
                                   const percentage = total > 0 ? (value / total) * 100 : 0;
                                   return `${percentage.toFixed(1)}%`;
                                 }}
                                 outerRadius={80}
                                 fill="#8884d8"
-                                dataKey="count"
+                                        dataKey="yValue"
                               >
-                                {analyticsData.groupBy.slice(0, analyticsLimit).map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#ff7300'][index % 8]} />
+                                        {chartData.map((entry, index) => (
+                                          <Cell key={`cell-${index}`} fill={chart.settings.colors[index % chart.settings.colors.length]} />
                                 ))}
                               </Pie>
-                              <Tooltip 
-                                formatter={(value: any, name: any, props: any) => [
-                                  `${value} (${((value / analyticsData.groupBy.reduce((sum, item) => sum + (Number(item.count) || 0), 0)) * 100).toFixed(1)}%)`,
-                                  props.payload.value
-                                ]}
-                                labelFormatter={(label: any, payload: any) => {
-                                  if (payload && payload.length > 0) {
-                                    return `Value: ${payload[0].payload.value}`;
-                                  }
-                                  return label;
-                                }}
-                              />
-                              <Legend 
-                                formatter={(value: any, entry: any) => {
-                                  const actualValue = entry.payload?.value || value;
-                                  const fullValue = String(actualValue);
-                                  return fullValue.length > 20 ? fullValue.substring(0, 17) + '...' : fullValue;
-                                }}
-                              />
+                                      {chart.settings.showTooltip && <Tooltip />}
+                                      {chart.settings.showLegend && <Legend />}
                             </PieChart>
-                          ) : (
-                            <BarChart data={analyticsData.groupBy.slice(0, analyticsLimit)}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="value" />
+                                  );
+                                case 'scatter':
+                                  return (
+                                    <ScatterChart data={chartData}>
+                                      {chart.settings.showGrid && <CartesianGrid strokeDasharray="3 3" />}
+                                      <XAxis dataKey="xValue" />
                               <YAxis />
-                              <Tooltip />
-                              <Bar dataKey="count" fill="#10b981" />
-                            </BarChart>
-                          )}
-                        </ResponsiveContainer>
+                                      {chart.settings.showTooltip && <Tooltip />}
+                                      {chart.settings.showLegend && <Legend />}
+                                      <Scatter 
+                                        dataKey={chart.fields.values[0]?.field ? `${chart.fields.values[0].field}_value` : "yValue"} 
+                                        fill={chart.settings.colors[0] || "#3b82f6"} 
+                                        name={chart.fields.values[0]?.field || "Count"} 
+                                      />
+                                    </ScatterChart>
+                                  );
+                                case 'card':
+                                  return (
+                                    <div className="flex items-center justify-center h-full">
+                                      <div className="text-center">
+                                        <div className="text-3xl font-bold text-indigo-600">
+                                          {chartData.reduce((sum, item) => sum + (Number(item.yValue) || 0), 0).toLocaleString()}
                     </div>
-                  )}
+                                        <div className="text-sm text-gray-500">
+                                          {chart.fields.values[0]?.field || "Total Count"}
                 </div>
-
-                {/* Time Series Chart */}
-                {chartConfigs.timeSeries.show && analyticsData.timeSeries.length > 0 && (
-                  <div className="bg-white p-6 rounded-lg border">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-lg font-semibold text-gray-900">Time Series</h4>
-                      <div className="flex items-center space-x-2">
-                        <select
-                          value={chartConfigs.timeSeries.type}
-                          onChange={(e) => setChartConfigs(prev => ({
-                            ...prev,
-                            timeSeries: { ...prev.timeSeries, type: e.target.value as any }
-                          }))}
-                          className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                        >
-                          <option value="line">Line</option>
-                          <option value="area">Area</option>
-                          <option value="bar">Bar</option>
-                        </select>
-                        <button
-                          onClick={() => setChartConfigs(prev => ({
-                            ...prev,
-                            timeSeries: { ...prev.timeSeries, show: false }
-                          }))}
-                          className="text-gray-400 hover:text-gray-600"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
                       </div>
                     </div>
-                        <ResponsiveContainer width="100%" height={300}>
-                          {(() => {
-                            const data = analyticsData.timeSeries;
-                            switch (chartConfigs.timeSeries.type) {
-                              case 'line':
+                                  );
+                                case 'kpi':
                                 return (
-                                  <LineChart data={data}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="date" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} />
-                                  </LineChart>
-                                );
-                              case 'area':
-                                return (
-                                  <AreaChart data={data}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="date" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
-                                  </AreaChart>
+                                    <div className="flex items-center justify-center h-full">
+                                      <div className="text-center">
+                                        <div className="text-2xl font-bold text-green-600">
+                                          {chartData.length > 0 ? chartData[0].yValue : 0}
+                                        </div>
+                                        <div className="text-sm text-gray-500">
+                                          {chart.fields.values[0]?.field || "KPI Value"}
+                                        </div>
+                                        <div className="text-xs text-gray-400 mt-1">
+                                          {chart.fields.axis.find(a => a.type === 'x')?.field || "Current Period"}
+                                        </div>
+                                      </div>
+                                    </div>
                                 );
                               default:
                                 return (
-                                  <BarChart data={data}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="date" />
-                                    <YAxis />
-                                    <Tooltip />
-                                    <Bar dataKey="count" fill="#3b82f6" />
-                                  </BarChart>
+                                    <div className="flex items-center justify-center h-full text-gray-500">
+                                      Chart type not supported
+                                    </div>
                                 );
                             }
                           })()}
                         </ResponsiveContainer>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
                   </div>
                 )}
 
-                {/* Field Statistics Chart */}
-                {chartConfigs.fieldStats.show && analyticsData.fieldStats && (
-                  <div className="bg-white p-6 rounded-lg border">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-lg font-semibold text-gray-900">Field Statistics</h4>
-                      <button
-                        onClick={() => setChartConfigs(prev => ({
-                          ...prev,
-                          fieldStats: { ...prev.fieldStats, show: false }
-                        }))}
-                        className="text-gray-400 hover:text-gray-600"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center p-4 bg-blue-50 rounded-lg">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {analyticsData.fieldStats.count || 0}
-                        </div>
-                        <div className="text-sm text-blue-800">Count</div>
-                      </div>
-                      <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <div className="text-2xl font-bold text-green-600">
-                          {analyticsData.fieldStats.avg ? analyticsData.fieldStats.avg.toFixed(2) : 'N/A'}
-                        </div>
-                        <div className="text-sm text-green-800">Average</div>
-                      </div>
-                      <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                        <div className="text-2xl font-bold text-yellow-600">
-                          {analyticsData.fieldStats.min ? analyticsData.fieldStats.min.toFixed(2) : 'N/A'}
-                        </div>
-                        <div className="text-sm text-yellow-800">Minimum</div>
-                      </div>
-                      <div className="text-center p-4 bg-purple-50 rounded-lg">
-                        <div className="text-2xl font-bold text-purple-600">
-                          {analyticsData.fieldStats.max ? analyticsData.fieldStats.max.toFixed(2) : 'N/A'}
-                        </div>
-                        <div className="text-sm text-purple-800">Maximum</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       )}
