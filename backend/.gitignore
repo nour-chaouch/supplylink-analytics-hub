@@ -3,3 +3,6 @@ node_modules/
 *.log
 coverage/
 dist/
+
+# CSV output files from Python scripts
+scripts/csv_output/
