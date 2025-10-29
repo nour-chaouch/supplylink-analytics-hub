@@ -102,7 +102,11 @@ interface AnalyticsData {
   availableFields: Array<{ name: string; type: string; searchable: boolean }>;
 }
 
-const Search: React.FC = () => {
+interface SearchProps {
+  initialTab?: 'search' | 'analytics';
+}
+
+const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
   const { user } = useSelector((state: RootState) => state.auth);
   const isAdmin = user?.role === 'admin';
   
@@ -123,7 +127,7 @@ const Search: React.FC = () => {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [stackedChartData, setStackedChartData] = useState<any[]>([]);
   const [stackedChartLoading, setStackedChartLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'analytics'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'analytics'>(initialTab);
   const [analyticsField, setAnalyticsField] = useState('');
   const [analyticsGroupBy, setAnalyticsGroupBy] = useState('');
   const [analyticsTimeField, setAnalyticsTimeField] = useState('');
@@ -763,11 +767,18 @@ const Search: React.FC = () => {
       visible: true
     };
     
-    setAnalyticsBuilder(prev => ({
-      ...prev,
-      charts: [...prev.charts, newChart],
-      activeChartId: newChart.id
-    }));
+    console.log('Creating new chart:', newChart);
+    console.log('Current charts count:', analyticsBuilder.charts.length);
+    
+    setAnalyticsBuilder(prev => {
+      const newCharts = [...prev.charts, newChart];
+      console.log('Updated charts:', newCharts);
+      return {
+        ...prev,
+        charts: newCharts,
+        activeChartId: newChart.id
+      };
+    });
   };
 
   const updateChart = (chartId: string, updates: Partial<typeof analyticsBuilder.charts[0]>) => {
@@ -1631,17 +1642,30 @@ const Search: React.FC = () => {
             </div>
 
             {/* Chart Builder Interface */}
+            <div className="border rounded-lg p-4 bg-gray-50 mb-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-lg font-semibold text-gray-900">Chart Builder</h4>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={createNewChart}
+                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors"
+                  >
+                    + New Chart
+                  </button>
+                  {!analyticsData && (
+                    <span className="text-sm text-gray-500">
+                      Load analytics data to populate charts
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {analyticsData && (
-              <div className="border rounded-lg p-4 bg-gray-50">
+              <div className="border rounded-lg p-4 bg-gray-50 mb-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-semibold text-gray-900">Chart Builder</h4>
+                  <h4 className="text-lg font-semibold text-gray-900">Quick Chart Templates</h4>
                   <div className="flex items-center space-x-2">
-                    <button
-                      onClick={createNewChart}
-                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors"
-                    >
-                      + New Chart
-                    </button>
                     <button
                       onClick={() => {
                         // Create a stacked chart: Sum of Value by Item for each Area
@@ -2325,6 +2349,29 @@ const Search: React.FC = () => {
                         )}
                         
                         <div style={{ height: Math.min(chart.settings.height - 60, 340) }}>
+                          {chartData.length === 0 && (
+                            <div className="flex items-center justify-center h-full bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                              <div className="text-center p-8">
+                                <BarChart3 className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                                <p className="text-sm font-medium text-gray-900 mb-2">No data to display</p>
+                                <p className="text-xs text-gray-500 mb-4">
+                                  {!analyticsData 
+                                    ? 'Load analytics data first' 
+                                    : 'Configure chart fields to view data'
+                                  }
+                                </p>
+                                <button
+                                  onClick={() => setConfiguringChart(chart.id)}
+                                  className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors"
+                                >
+                                  Configure Chart
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {chartData.length > 0 && (
+                            <>
                           {/* Stacked Chart Button for multi-dimensional charts */}
                           {hasXAxis && hasValueField && hasColorField && (
                             <div className="mb-2">
@@ -2746,6 +2793,8 @@ const Search: React.FC = () => {
                           })()}
                         </ResponsiveContainer>
                           </div>
+                        </>
+                      )}
                         </div>
                       </div>
                     );
@@ -3021,7 +3070,7 @@ const Search: React.FC = () => {
           <Database className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Select a Data Index</h3>
           <p className="mt-1 text-sm text-gray-500">
-            Choose an index from above to start {activeTab === 'search' ? 'searching' : 'analyzing'}.
+            Choose an index from above to start {activeTab === 'search' ? 'searching' : 'analyzing'} data.
           </p>
         </div>
       )}

@@ -10,7 +10,43 @@ router.get('/indices', async (req, res) => {
     const client = esService.client;
     
     if (!client) {
-      return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
+      // Elasticsearch not available - return empty list or try MongoDB metadata only
+      try {
+        const IndexMetadata = require('../models/IndexMetadata');
+        const metadataList = await IndexMetadata.find({}).populate('createdBy', 'username email');
+        
+        // Return metadata from MongoDB as indices
+        const indices = metadataList.map(metadata => ({
+          name: metadata.indexName,
+          displayName: metadata.title || metadata.indexName,
+          description: metadata.description || `Data from ${metadata.indexName} index`,
+          icon: metadata.icon || 'Database',
+          documentCount: 0,
+          status: 'unknown',
+          health: 'unknown',
+          size: '0kb',
+          lastModified: null,
+          createdAt: metadata.createdAt,
+          updatedAt: metadata.updatedAt,
+          createdBy: metadata.createdBy,
+          hasMetadata: true
+        }));
+        
+        console.log('⚠️  Elasticsearch not available, returning MongoDB metadata only');
+        return res.json({
+          success: true,
+          data: indices,
+          warning: 'Elasticsearch is not running. Install and start Elasticsearch to see full index information.'
+        });
+      } catch (mongoError) {
+        // Even MongoDB is not available
+        console.log('⚠️  Elasticsearch and MongoDB not available');
+        return res.json({
+          success: true,
+          data: [],
+          warning: 'Neither Elasticsearch nor MongoDB is available. Please install Elasticsearch and/or configure MongoDB.'
+        });
+      }
     }
     
     // Get all indices from Elasticsearch
@@ -29,14 +65,18 @@ router.get('/indices', async (req, res) => {
       }));
 
     // Get metadata from MongoDB
-    const IndexMetadata = require('../models/IndexMetadata');
-    const metadataList = await IndexMetadata.find({}).populate('createdBy', 'username email');
-    
-    // Create a map of metadata by index name
-    const metadataMap = {};
-    metadataList.forEach(metadata => {
-      metadataMap[metadata.indexName] = metadata;
-    });
+    let metadataMap = {};
+    try {
+      const IndexMetadata = require('../models/IndexMetadata');
+      const metadataList = await IndexMetadata.find({}).populate('createdBy', 'username email');
+      
+      // Create a map of metadata by index name
+      metadataList.forEach(metadata => {
+        metadataMap[metadata.indexName] = metadata;
+      });
+    } catch (mongoError) {
+      console.log('⚠️  MongoDB not available for metadata');
+    }
 
     // Combine Elasticsearch data with MongoDB metadata
     const indices = elasticsearchIndices.map(index => {
@@ -69,6 +109,7 @@ router.get('/indices', async (req, res) => {
       data: indices
     });
   } catch (error) {
+    console.error('Error loading indices:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -844,3 +885,5 @@ router.get('/analytics', async (req, res) => {
 });
 
 module.exports = router;
+
+

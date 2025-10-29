@@ -42,6 +42,7 @@ function App() {
                   <Route path="/" element={<GuestLayout />}>
                     <Route index element={<Home />} />
                     <Route path="search" element={<Search />} />
+                    <Route path="analytics" element={<Search initialTab="analytics" />} />
                   </Route>
                   
                   {/* Authenticated routes - require login */}

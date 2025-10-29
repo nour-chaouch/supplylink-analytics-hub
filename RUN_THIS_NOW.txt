@@ -1,0 +1,37 @@
+╔═══════════════════════════════════════════════════════════════╗
+║         INSTALL ELASTICSEARCH - RUN THIS IN POWERSHELL       ║
+╚═══════════════════════════════════════════════════════════════╝
+
+1. Open PowerShell as ADMINISTRATOR:
+   • Press Windows key
+   • Type "PowerShell"
+   • Right-click → Run as Administrator
+
+2. Copy and paste this command:
+
+   winget install --id=Elastic.Elasticsearch --accept-package-agreements --accept-source-agreements
+
+3. Wait for installation to complete (may take 5-10 minutes)
+
+4. After installation, run this to start Elasticsearch:
+
+   Start-Service elasticsearch
+
+5. Verify it's working:
+
+   curl http://localhost:9200
+
+6. Done! Refresh your SupplyLink frontend.
+
+═══════════════════════════════════════════════════════════════
+
+ALTERNATIVE - If winget doesn't work, use Docker:
+
+docker run -d --name elasticsearch -p 9200:9200 -p 9300:9300 `
+-e "discovery.type=single-node" `
+-e "xpack.security.enabled=false" `
+docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+
+═══════════════════════════════════════════════════════════════
+
+

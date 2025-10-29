@@ -1,0 +1,93 @@
+═══════════════════════════════════════════════════════════════
+Quick Instructions to Fix "No Elasticsearch indices found"
+═══════════════════════════════════════════════════════════════
+
+The application needs Elasticsearch to store and search data.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+METHOD 1: Winget (Windows Package Manager) - EASIEST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Open PowerShell as Administrator:
+   - Press Windows key
+   - Type "PowerShell"
+   - Right-click "Windows PowerShell"
+   - Select "Run as Administrator"
+
+2. Run this command:
+   winget install --id=Elastic.Elasticsearch -e --accept-package-agreements --accept-source-agreements
+
+3. Once installed, start Elasticsearch:
+   Start-Service elasticsearch
+
+4. Verify it's working:
+   curl http://localhost:9200
+
+Done! Refresh your SupplyLink frontend.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+METHOD 2: Docker - If you have Docker Desktop
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Open PowerShell or Command Prompt and run:
+
+docker run -d --name elasticsearch -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" -e "xpack.security.enabled=false" docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+
+That's it! Elasticsearch is now running.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+METHOD 3: Manual Installation (If methods above don't work)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Prerequisites:
+  1. Install Java 17 (required for Elasticsearch):
+     Download: https://adoptium.net/temurin/releases/?version=17
+     Choose: Windows x64 JDK installer
+     Install it
+
+  2. Install Elasticsearch:
+     Download: https://www.elastic.co/downloads/elasticsearch
+     Choose: Windows x86_64 ZIP file
+     
+  3. Extract to C:\elasticsearch
+     (You should have: C:\elasticsearch\elasticsearch-8.11.0)
+
+  4. Open PowerShell and run:
+     cd C:\elasticsearch\elasticsearch-8.11.0\bin
+     .\elasticsearch.bat
+
+  5. Keep that window open (Elasticsearch will run there)
+     
+  6. In a NEW PowerShell, verify it's running:
+     curl http://localhost:9200
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VERIFY IT'S WORKING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After installing and starting Elasticsearch, run this command:
+
+curl http://localhost:9200
+
+You should see JSON output with version information.
+
+Then:
+1. Go to http://localhost:3000 in your browser
+2. You should now see available indices!
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEED HELP?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+See detailed documentation:
+- ELASTICSEARCH_SETUP.md (full installation guide)
+- QUICK_START.md (quick reference)
+- CURRENT_STATUS.md (current status)
+
+═══════════════════════════════════════════════════════════════
+
+
