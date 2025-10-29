@@ -330,6 +330,45 @@ export const agriculturalAPI = {
     api.get('/agricultural/analytics', { params }),
 };
 
+// Charts API - NEW
+export const chartsAPI = {
+  // Get all my charts
+  getCharts: (includePublic = false) =>
+    api.get('/charts', { params: { includePublic } }),
+
+  // Get chart by ID
+  getChart: (id: string) =>
+    api.get(`/charts/${id}`),
+
+  // Create chart
+  createChart: (chartData: any) =>
+    api.post('/charts', chartData),
+
+  // Update chart
+  updateChart: (id: string, chartData: any) =>
+    api.put(`/charts/${id}`, chartData),
+
+  // Delete chart
+  deleteChart: (id: string) =>
+    api.delete(`/charts/${id}`),
+
+  // Get chart data (generated)
+  getChartData: (id: string) =>
+    api.get(`/charts/${id}/data`),
+
+  // Get fields for index (for builder)
+  getIndexFieldsForBuilder: (indexName: string) =>
+    api.get(`/charts/builder/indexes/${indexName}/fields`),
+
+  // Search public charts
+  searchPublicCharts: (params = {}) =>
+    api.get('/charts/public', { params }),
+
+  // Duplicate chart
+  duplicateChart: (id: string, newName?: string) =>
+    api.post(`/charts/${id}/duplicate`, { name: newName }),
+};
+
 // Health check
 export const healthCheck = () => api.get('/health');
 

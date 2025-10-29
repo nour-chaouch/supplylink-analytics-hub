@@ -12,12 +12,15 @@ import Register from './pages/Register';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import Search from './pages/Search';
+import Charts from './pages/Charts';
+import ChartView from './pages/ChartView';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import ElasticsearchAdmin from './pages/ElasticsearchAdmin';
 import AllSettings from './components/ImportSettings';
 import MaintenanceCheck from './components/MaintenanceCheck';
 import ProtectedRoute from './components/ProtectedRoute';
+import ChartCreate from './pages/ChartCreate';
 import AdminRoute from './components/AdminRoute';
 import RegistrationRoute from './components/RegistrationRoute';
 
@@ -51,6 +54,18 @@ function App() {
                     </ProtectedRoute>
                   }>
                     <Route index element={<Dashboard />} />
+                  </Route>
+
+                  {/* Charts routes - require login */}
+                  <Route path="/charts" element={
+                    <ProtectedRoute>
+                      <Layout />
+                    </ProtectedRoute>
+                  }>
+                    <Route index element={<Charts />} />
+                    <Route path="create" element={<ChartCreate />} />
+                    <Route path=":id" element={<ChartView />} />
+                    <Route path=":id/edit" element={<ChartCreate />} />
                   </Route>
                   
                   {/* Admin routes - require authentication and admin role */}

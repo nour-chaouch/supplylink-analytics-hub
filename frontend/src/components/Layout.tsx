@@ -32,6 +32,7 @@ const Layout: React.FC = () => {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Search & Analytics', href: '/search', icon: Search },
+    { name: 'Graphiques', href: '/charts', icon: BarChart3 },
   ];
 
   const adminNavigation = [
