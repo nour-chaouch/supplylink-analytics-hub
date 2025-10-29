@@ -13,23 +13,36 @@ class ElasticsearchService {
         throw new Error('Elasticsearch client not initialized');
       }
 
+      // Nettoyer le document pour éviter les champs en double
+      const cleanDocument = { ...document };
+      // Retirer les champs qui pourraient être dupliqués
+      delete cleanDocument.createdAt;
+      delete cleanDocument.updatedAt;
+      delete cleanDocument.id;
+      delete cleanDocument._id;
+
+      console.log(`[ElasticsearchService.create] Index: ${this.indexName}, Document keys:`, Object.keys(cleanDocument));
+
       const response = await this.client.index({
         index: this.indexName,
-        body: {
-          ...document,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }
+        body: cleanDocument
       });
+
+      console.log(`[ElasticsearchService.create] Document indexed with ID: ${response._id}, result: ${response.result}`);
+
+      // Attendre un peu pour que l'indexation soit terminée (refresh)
+      await this.client.indices.refresh({ index: this.indexName });
 
       return {
         _id: response._id,
-        ...document,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        ...cleanDocument
       };
     } catch (error) {
-      console.error(`Error creating document in ${this.indexName}:`, error.message);
+      console.error(`[ElasticsearchService.create] Error creating document in ${this.indexName}:`, error.message);
+      if (error.meta && error.meta.body) {
+        console.error(`[ElasticsearchService.create] Error details:`, JSON.stringify(error.meta.body, null, 2));
+      }
+      console.error(`[ElasticsearchService.create] Error stack:`, error.stack);
       throw error;
     }
   }
@@ -122,17 +135,29 @@ class ElasticsearchService {
         throw new Error('Elasticsearch client not initialized');
       }
 
-      await this.client.delete({
+      console.log(`[ElasticsearchService.delete] Deleting document ID: ${id} from index: ${this.indexName}`);
+
+      const response = await this.client.delete({
         index: this.indexName,
         id: id
       });
 
+      console.log(`[ElasticsearchService.delete] Deletion successful. Result: ${response.result}`);
+
+      // Refresh l'index pour que la suppression soit immédiatement visible
+      await this.client.indices.refresh({ index: this.indexName });
+
       return true;
     } catch (error) {
-      if (error.statusCode === 404) {
-        return false;
+      console.error(`[ElasticsearchService.delete] Error deleting document in ${this.indexName}:`, error.message);
+      if (error.meta && error.meta.body) {
+        console.error(`[ElasticsearchService.delete] Error details:`, JSON.stringify(error.meta.body, null, 2));
       }
-      console.error(`Error deleting document in ${this.indexName}:`, error.message);
+      // Si le document n'existe pas (404), on peut considérer que c'est déjà supprimé
+      if (error.statusCode === 404 || (error.meta && error.meta.statusCode === 404)) {
+        console.log(`[ElasticsearchService.delete] Document ${id} not found (404), considering as already deleted`);
+        return true; // Considérer comme succès si déjà supprimé
+      }
       throw error;
     }
   }
@@ -235,16 +260,19 @@ class ElasticsearchService {
   }
 
   // Aggregate data
-  async aggregate(aggregations) {
+  async aggregate(aggregations, query = null) {
     try {
       if (!this.client) {
         throw new Error('Elasticsearch client not initialized');
       }
 
+      // Utiliser la query fournie ou match_all par défaut
+      const searchQuery = query || { match_all: {} };
+
       const response = await this.client.search({
         index: this.indexName,
         body: {
-          query: { match_all: {} },
+          query: searchQuery,
           aggs: aggregations,
           size: 0
         }

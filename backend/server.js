@@ -75,6 +75,7 @@ app.get('/api/public/system-settings', (req, res) => {
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/faostat', faostatRoutes);
 app.use('/api/agricultural', require('./routes/agriculturalDataRoutes'));
+app.use('/api/charts', require('./routes/chartConfigurationRoutes'));
 
 // Debug middleware for admin routes
 app.use('/api/admin', (req, res, next) => {

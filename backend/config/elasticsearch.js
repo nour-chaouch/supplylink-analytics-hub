@@ -58,6 +58,16 @@ const initializeElasticsearch = async () => {
   
   if (elasticsearchClient) {
     console.log('✅ Elasticsearch client initialized successfully');
+    
+    // Créer automatiquement l'index chart_configurations si nécessaire
+    try {
+      const { createIndex, indexMappings } = require('./elasticsearchMappings');
+      if (indexMappings.chart_configurations) {
+        await createIndex('chart_configurations', indexMappings.chart_configurations);
+      }
+    } catch (error) {
+      console.warn('⚠️  Could not auto-create chart_configurations index:', error.message);
+    }
   } else {
     console.log('❌ Elasticsearch client initialization failed');
   }

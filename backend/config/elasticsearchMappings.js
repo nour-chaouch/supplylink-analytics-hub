@@ -95,6 +95,35 @@ const indexMappings = {
         updatedAt: { type: 'date' }
       }
     }
+  },
+
+  // Chart configurations index mapping
+  chart_configurations: {
+    mappings: {
+      properties: {
+        name: { 
+          type: 'text', 
+          fields: { keyword: { type: 'keyword' } } 
+        },
+        type: { type: 'keyword' },
+        indexName: { type: 'keyword' },
+        description: { type: 'text' },
+        dataConfig: { type: 'object', enabled: false },
+        filters: { type: 'object', enabled: false },
+        visualization: { type: 'object', enabled: false },
+        metadata: {
+          properties: {
+            createdBy: { type: 'keyword' },
+            createdAt: { type: 'date' },
+            updatedAt: { type: 'date' },
+            tags: { type: 'keyword' },
+            isPublic: { type: 'boolean' },
+            description: { type: 'text' }
+          }
+        },
+        version: { type: 'keyword' }
+      }
+    }
   }
 };
 

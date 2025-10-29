@@ -84,3 +84,4 @@ Le CSV contient des colonnes comme:
 - Le script gère automatiquement la pagination pour récupérer toutes les données
 - Les données sont sauvegardées avec un timestamp dans le nom du fichier
 - Le script affiche le progrès dans stderr pour suivre la progression
+

@@ -780,12 +780,31 @@ router.get('/indices/:indexName/analytics', async (req, res) => {
       };
     }
     
-    // Get all available fields for reference
-    const availableFields = Object.keys(properties).map(fieldName => ({
-      name: fieldName,
-      type: properties[fieldName].type,
-      searchable: properties[fieldName].type === 'text' || properties[fieldName].type === 'keyword'
-    }));
+    // Get all available fields for reference with chart capabilities
+    const availableFields = Object.keys(properties).map(fieldName => {
+      const field = properties[fieldName];
+      const fieldType = field.type;
+      
+      // Détecter si le champ a un sous-champ keyword
+      let keywordField = null;
+      if (field.fields && field.fields.keyword) {
+        keywordField = `${fieldName}.keyword`;
+      }
+
+      return {
+        name: fieldName,
+        type: fieldType,
+        keywordField: keywordField,
+        searchable: fieldType === 'text' || fieldType === 'keyword',
+        // Capacités pour les graphiques
+        canBeAxis: fieldType === 'keyword' || fieldType === 'text' || fieldType === 'date' || fieldType === 'integer',
+        canBeMetric: fieldType === 'integer' || fieldType === 'long' || fieldType === 'float' || fieldType === 'double',
+        canBeFilter: true,
+        canBeSeries: fieldType === 'keyword' || fieldType === 'text',
+        canBeTimeField: fieldType === 'date',
+        aggregatable: fieldType !== 'text' || keywordField !== null
+      };
+    });
     
     // Perform analytics query
     const response = await client.search({
