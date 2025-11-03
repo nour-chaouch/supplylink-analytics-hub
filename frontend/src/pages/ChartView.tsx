@@ -48,15 +48,15 @@ const ChartView: React.FC = () => {
       if (response.data.success) {
         setChartConfig(response.data.data.config);
         
-        // Formater les données pour Recharts
+        // Format data for Recharts
         const formattedData = response.data.data.chartData;
         setChartData(formattedData);
       } else {
-        setError(response.data.message || 'Erreur lors du chargement du graphique');
+        setError(response.data.message || 'Error loading chart');
       }
     } catch (err: any) {
       console.error('Error:', err);
-      setError(err.response?.data?.message || 'Erreur lors du chargement du graphique');
+      setError(err.response?.data?.message || 'Error loading chart');
     } finally {
       setLoading(false);
     }
@@ -67,17 +67,17 @@ const ChartView: React.FC = () => {
 
     const COLORS = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
     
-    // Calculer la hauteur du graphique en fonction du nombre de labels
+    // Calculate chart height based on number of labels
     const labelCount = chartData.labels.length;
     const baseHeight = 500;
     const minHeight = 400;
-    // Plus de labels = plus de hauteur, max 800px
+    // More labels = more height, max 800px
     const chartHeight = Math.min(
       Math.max(minHeight, baseHeight + (labelCount - 5) * 30),
       800
     );
     
-    // Déterminer l'angle des labels selon le nombre d'items
+    // Determine label angle based on number of items
     let labelAngle = 0;
     let labelHeight = 40;
     if (labelCount > 10) {
@@ -88,7 +88,7 @@ const ChartView: React.FC = () => {
       labelHeight = 60;
     }
     
-    // Tronquer les labels longs pour éviter le chevauchement
+    // Truncate long labels to avoid overlap
     const truncateLabel = (label: string, maxLength: number = 20) => {
       if (label.length <= maxLength) return label;
       return label.substring(0, maxLength - 3) + '...';
@@ -179,7 +179,7 @@ const ChartView: React.FC = () => {
                             />
                             <span className="font-semibold text-gray-700">{entry.name}:</span>
                             <span className="font-bold text-blue-600">
-                              {typeof entry.value === 'number' ? entry.value.toLocaleString('fr-FR') : entry.value}
+                              {typeof entry.value === 'number' ? entry.value.toLocaleString('en-US') : entry.value}
                             </span>
                           </div>
                         ))}
@@ -290,7 +290,7 @@ const ChartView: React.FC = () => {
                             />
                             <span className="font-semibold text-gray-700">{entry.name}:</span>
                             <span className="font-bold text-blue-600">
-                              {typeof entry.value === 'number' ? entry.value.toLocaleString('fr-FR') : entry.value}
+                              {typeof entry.value === 'number' ? entry.value.toLocaleString('en-US') : entry.value}
                             </span>
                           </div>
                         ))}
@@ -313,7 +313,7 @@ const ChartView: React.FC = () => {
                 const isSmooth = chartConfig.visualization?.smooth;
                 return (
                   <React.Fragment key={index}>
-                    {/* Zone ombrée sous la ligne */}
+                    {/* Shaded area under the line */}
                     <Area
                       type={isSmooth ? 'monotone' : 'linear'}
                       dataKey={dataset.label || `Series ${index + 1}`}
@@ -321,7 +321,7 @@ const ChartView: React.FC = () => {
                       fill={`url(#gradientLine${index})`}
                       fillOpacity={0.3}
                     />
-                    {/* Ligne principale */}
+                    {/* Main line */}
                     <Line
                       type={isSmooth ? 'monotone' : 'linear'}
                       dataKey={dataset.label || `Series ${index + 1}`}
@@ -418,7 +418,7 @@ const ChartView: React.FC = () => {
                             />
                             <span className="font-semibold text-gray-700">{entry.name}:</span>
                             <span className="font-bold text-blue-600">
-                              {typeof entry.value === 'number' ? entry.value.toLocaleString('fr-FR') : entry.value}
+                              {typeof entry.value === 'number' ? entry.value.toLocaleString('en-US') : entry.value}
                             </span>
                           </div>
                         ))}
@@ -489,7 +489,7 @@ const ChartView: React.FC = () => {
                 cy="50%"
                 labelLine={false}
                 label={({ name, percent }: any) => {
-                  if (percent < 0.03) return ''; // Ne pas afficher les labels trop petits
+                  if (percent < 0.03) return ''; // Don't show very small labels
                   return `${name}: ${(percent * 100).toFixed(1)}%`;
                 }}
                 outerRadius={chartConfig.type === 'doughnut' ? 120 : 140}
@@ -540,13 +540,13 @@ const ChartView: React.FC = () => {
                           {data.name}
                         </p>
                         <p className="text-gray-700">
-                          <span className="font-semibold">Valeur:</span>{' '}
+                          <span className="font-semibold">Value:</span>{' '}
                           <span className="font-bold text-blue-600">
-                            {typeof data.value === 'number' ? data.value.toLocaleString('fr-FR') : data.value}
+                            {typeof data.value === 'number' ? data.value.toLocaleString('en-US') : data.value}
                           </span>
                         </p>
                         <p className="text-gray-700">
-                          <span className="font-semibold">Pourcentage:</span>{' '}
+                          <span className="font-semibold">Percentage:</span>{' '}
                           <span className="font-bold text-purple-600">{percentage}%</span>
                         </p>
                       </div>
@@ -609,18 +609,18 @@ const ChartView: React.FC = () => {
                     return (
                       <div className="bg-white p-4 border-2 border-blue-300 rounded-lg shadow-2xl backdrop-blur-sm" style={{ boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
                         <p className="font-bold text-lg mb-2 text-gray-800 border-b border-gray-200 pb-2">
-                          Point de données
+                          Data Point
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="font-semibold text-gray-700">X:</span>
                           <span className="font-bold text-blue-600">
-                            {typeof data.x === 'number' ? data.x.toLocaleString('fr-FR') : data.x}
+                            {typeof data.x === 'number' ? data.x.toLocaleString('en-US') : data.x}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="font-semibold text-gray-700">Y:</span>
                           <span className="font-bold text-blue-600">
-                            {typeof data.y === 'number' ? data.y.toLocaleString('fr-FR') : data.y}
+                            {typeof data.y === 'number' ? data.y.toLocaleString('en-US') : data.y}
                           </span>
                         </div>
                       </div>
@@ -658,7 +658,7 @@ const ChartView: React.FC = () => {
 
       default:
         return <div className="p-8 text-center text-gray-500">
-          Type de graphique non supporté: {chartConfig.type}
+          Unsupported chart type: {chartConfig.type}
         </div>;
     }
   };
@@ -668,7 +668,7 @@ const ChartView: React.FC = () => {
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center h-64">
-            <div className="text-gray-500">Chargement du graphique...</div>
+            <div className="text-gray-500">Loading chart...</div>
           </div>
         </div>
       </div>
@@ -686,13 +686,13 @@ const ChartView: React.FC = () => {
                 onClick={() => navigate('/charts')}
                 className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
               >
-                Retour
+                Back
               </button>
               <button
                 onClick={fetchChartData}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
-                Réessayer
+                Retry
               </button>
             </div>
           </div>
@@ -736,7 +736,7 @@ const ChartView: React.FC = () => {
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-gray-100 to-gray-200 rounded-lg hover:from-gray-200 hover:to-gray-300 transition shadow-sm hover:shadow font-medium"
               >
                 <RefreshCw className="w-4 h-4" />
-                Actualiser
+                Refresh
               </button>
               {chartConfig?.metadata?.createdBy === user?.id && (
                 <button
@@ -744,7 +744,7 @@ const ChartView: React.FC = () => {
                   className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition shadow-md hover:shadow-lg font-medium"
                 >
                   <Edit className="w-4 h-4" />
-                  Modifier
+                  Edit
                 </button>
               )}
             </div>
@@ -794,13 +794,13 @@ const ChartView: React.FC = () => {
               transformStyle: 'preserve-3d'
             }}
           >
-            <h2 className="text-xl font-bold mb-4 text-gray-900 border-b border-gray-200 pb-3">Détails</h2>
+            <h2 className="text-xl font-bold mb-4 text-gray-900 border-b border-gray-200 pb-3">Details</h2>
             
             {chartConfig?.filters && Object.keys(chartConfig.filters).length > 0 && (
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Filter className="w-4 h-4" />
-                  Filtres appliqués
+                  Applied Filters
                 </h3>
                 <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200">
                   <pre className="text-sm overflow-x-auto text-gray-700 font-mono">
@@ -833,4 +833,3 @@ const ChartView: React.FC = () => {
 };
 
 export default ChartView;
-

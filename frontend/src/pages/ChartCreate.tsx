@@ -14,14 +14,14 @@ const ChartCreate: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   
-  // États pour la sélection de pays
+  // States for country selection
   const [availableCountries, setAvailableCountries] = useState<any[]>([]);
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [countrySearchTerm, setCountrySearchTerm] = useState('');
   const [loadingCountries, setLoadingCountries] = useState(false);
   const [countryFieldName, setCountryFieldName] = useState<string>('');
   
-  // États pour les filtres supplémentaires
+  // States for additional filters
   const [availableYears, setAvailableYears] = useState<any[]>([]);
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
   const [availableElements, setAvailableElements] = useState<any[]>([]);
@@ -69,12 +69,12 @@ const ChartCreate: React.FC = () => {
   }, [selectedIndex]);
 
   useEffect(() => {
-    // Mettre à jour les filtres quand les sélections changent
+    // Update filters when selections change
     if (selectedIndex) {
       setFormData(prev => {
         const newFilters = { ...prev.filters };
         
-        // Filtre pays
+        // Country filter
         if (countryFieldName) {
           if (selectedCountries.length > 0) {
             newFilters[countryFieldName] = selectedCountries;
@@ -83,11 +83,11 @@ const ChartCreate: React.FC = () => {
           }
         }
         
-        // Filtre année
-        // Si on utilise une plage (min-max), on garde l'objet range
-        // Sinon, si des années spécifiques sont sélectionnées, on utilise le tableau
+        // Year filter
+        // If using a range (min-max), keep the range object
+        // Otherwise, if specific years are selected, use the array
         if (prev.filters?.year && typeof prev.filters.year === 'object' && prev.filters.year.min !== undefined) {
-          // Garder la plage d'années
+          // Keep the year range
           newFilters.year = prev.filters.year;
         } else if (selectedYears.length > 0) {
           if (selectedYears.length === 1) {
@@ -99,14 +99,14 @@ const ChartCreate: React.FC = () => {
           delete newFilters.year;
         }
         
-        // Filtre élément
+        // Element filter
         if (selectedElements.length > 0) {
           newFilters.element = selectedElements;
         } else {
           delete newFilters.element;
         }
         
-        // Filtre item
+        // Item filter
         if (selectedItems.length > 0) {
           newFilters.item = selectedItems;
         } else {
@@ -154,7 +154,7 @@ const ChartCreate: React.FC = () => {
         const areaField = Object.keys(response.data.data.filterValues).find(
           key => key.toLowerCase() === 'area' || 
                  key.toLowerCase().includes('country') || 
-                 key.toLowerCase().includes('pays') ||
+                 key.toLowerCase().includes('country') ||
                  key.toLowerCase() === 'region'
         );
         
@@ -228,8 +228,7 @@ const ChartCreate: React.FC = () => {
         
         const areaField = Object.keys(config.filters || {}).find(
           key => key.toLowerCase() === 'area' || 
-                 key.toLowerCase().includes('country') ||
-                 key.toLowerCase().includes('pays')
+                 key.toLowerCase().includes('country')
         );
         if (areaField && Array.isArray(config.filters[areaField])) {
           setCountryFieldName(areaField);
@@ -239,7 +238,7 @@ const ChartCreate: React.FC = () => {
         if (config.filters?.year) {
           const yearValue = config.filters.year;
           if (typeof yearValue === 'object' && yearValue.min !== undefined) {
-            // Plage d'années - déjà dans formData.filters
+            // Year range - already in formData.filters
           } else if (Array.isArray(yearValue)) {
             setSelectedYears(yearValue);
           } else {
@@ -285,16 +284,16 @@ const ChartCreate: React.FC = () => {
         navigate('/charts');
       } else {
         console.error('[Frontend] Server returned success=false:', response.data);
-        alert('Erreur: ' + (response.data.message || 'Erreur lors de la sauvegarde'));
+        alert('Error: ' + (response.data.message || 'Error while saving'));
       }
     } catch (error: any) {
       console.error('[Frontend] Error saving chart:', error);
       console.error('[Frontend] Error response:', error.response);
       console.error('[Frontend] Error message:', error.message);
       
-      const errorMessage = error.response?.data?.message || error.message || 'Erreur lors de la sauvegarde';
+      const errorMessage = error.response?.data?.message || error.message || 'Error while saving';
       console.error('[Frontend] Displaying error to user:', errorMessage);
-      alert('Erreur lors de la sauvegarde: ' + errorMessage);
+      alert('Error while saving: ' + errorMessage);
     } finally {
       setSaving(false);
     }
@@ -304,7 +303,7 @@ const ChartCreate: React.FC = () => {
   const metricFields = availableFields.filter(f => f.canBeMetric);
 
   if (loading && isEditMode) {
-    return <div className="p-6">Chargement...</div>;
+    return <div className="p-6">Loading...</div>;
   }
 
   return (
@@ -320,24 +319,24 @@ const ChartCreate: React.FC = () => {
             </button>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {isEditMode ? 'Modifier le Graphique' : 'Créer un Graphique'}
+                {isEditMode ? 'Edit Chart' : 'Create Chart'}
               </h1>
               <p className="text-gray-600 mt-1">
-                {isEditMode ? 'Modifiez la configuration de votre graphique' : 'Configurez un nouveau graphique à partir de vos données'}
+                {isEditMode ? 'Modify your chart configuration' : 'Configure a new chart from your data'}
               </p>
             </div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-lg border border-gray-200 p-6 space-y-6">
-          {/* Informations de base */}
+          {/* Basic Information */}
           <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Informations de base</h2>
-            <p className="text-sm text-gray-600 mb-4">Configurez les informations principales de votre graphique</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Basic Information</h2>
+            <p className="text-sm text-gray-600 mb-4">Configure the main information of your chart</p>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nom du graphique *
+                  Chart Name *
                 </label>
                 <input
                   type="text"
@@ -345,7 +344,7 @@ const ChartCreate: React.FC = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   required
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                  placeholder="Ex: Production de blé par pays"
+                  placeholder="Ex: Wheat production by country"
                 />
               </div>
 
@@ -358,14 +357,14 @@ const ChartCreate: React.FC = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   rows={3}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition resize-none"
-                  placeholder="Description optionnelle du graphique..."
+                  placeholder="Optional chart description..."
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Type de graphique *
+                    Chart Type *
                   </label>
                   <select
                     value={formData.type}
@@ -373,18 +372,18 @@ const ChartCreate: React.FC = () => {
                     required
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white"
                   >
-                    <option value="bar">Barres</option>
-                    <option value="line">Courbes</option>
-                    <option value="area">Aires</option>
-                    <option value="pie">Camembert</option>
-                    <option value="doughnut">Donut</option>
-                    <option value="scatter">Nuage de points</option>
+                    <option value="bar">Bars</option>
+                    <option value="line">Lines</option>
+                    <option value="area">Area</option>
+                    <option value="pie">Pie</option>
+                    <option value="doughnut">Doughnut</option>
+                    <option value="scatter">Scatter</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Index de données *
+                    Data Index *
                   </label>
                   <select
                     value={selectedIndex}
@@ -392,7 +391,7 @@ const ChartCreate: React.FC = () => {
                     required
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
                   >
-                    <option value="">Sélectionner un index...</option>
+                    <option value="">Select an index...</option>
                     {indexes.map(index => (
                       <option key={index.name} value={index.name}>
                         {index.displayName || index.name}
@@ -404,15 +403,15 @@ const ChartCreate: React.FC = () => {
             </div>
           </div>
 
-          {/* Configuration des axes */}
+          {/* Data Configuration */}
           {selectedIndex && (
             <div className="border-b border-gray-200 pb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Configuration des données</h2>
-              <p className="text-sm text-gray-600 mb-4">Définissez les axes et métriques à visualiser</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Data Configuration</h2>
+              <p className="text-sm text-gray-600 mb-4">Define the axes and metrics to visualize</p>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Axe X (Catégories) *
+                    X-Axis (Categories) *
                   </label>
                   <select
                     value={formData.dataConfig.xAxis?.field || ''}
@@ -433,19 +432,19 @@ const ChartCreate: React.FC = () => {
                     required
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white"
                   >
-                    <option value="">Sélectionner un champ...</option>
+                    <option value="">Select a field...</option>
                     {axisFields.map(field => (
                       <option key={field.name} value={field.name}>
                         {field.name} ({field.type})
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">Champ utilisé pour grouper les données (ex: pays, année)</p>
+                  <p className="text-xs text-gray-500 mt-1">Field used to group data (e.g., country, year)</p>
                   
                   {formData.dataConfig.xAxis?.field && (
                     <div className="mt-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Limite d'affichage sur l'axe X (optionnel)
+                        X-Axis Display Limit (optional)
                       </label>
                       <input
                         type="number"
@@ -466,7 +465,7 @@ const ChartCreate: React.FC = () => {
                         placeholder="50"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Nombre maximum d'items à afficher (recommandé: 20-30). Les items sont triés par valeur décroissante.
+                        Maximum number of items to display (recommended: 20-30). Items are sorted by descending value.
                       </p>
                     </div>
                   )}
@@ -476,7 +475,7 @@ const ChartCreate: React.FC = () => {
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Axe Y (Métrique) *
+                        Y-Axis (Metric) *
                       </label>
                       <select
                         value={formData.dataConfig.yAxis?.field || ''}
@@ -497,19 +496,19 @@ const ChartCreate: React.FC = () => {
                         required
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white"
                       >
-                        <option value="">Sélectionner un champ...</option>
+                        <option value="">Select a field...</option>
                         {metricFields.map(field => (
                           <option key={field.name} value={field.name}>
                             {field.name} ({field.type})
                           </option>
                         ))}
                       </select>
-                      <p className="text-xs text-gray-500 mt-1">Champ numérique pour calculer les valeurs (ex: production, prix)</p>
+                      <p className="text-xs text-gray-500 mt-1">Numeric field to calculate values (e.g., production, price)</p>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Agrégation *
+                        Aggregation *
                       </label>
                       <select
                         value={formData.dataConfig.yAxis?.aggregation || 'sum'}
@@ -525,11 +524,11 @@ const ChartCreate: React.FC = () => {
                         }))}
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white"
                       >
-                        <option value="sum">Somme</option>
-                        <option value="avg">Moyenne</option>
+                        <option value="sum">Sum</option>
+                        <option value="avg">Average</option>
                         <option value="min">Minimum</option>
                         <option value="max">Maximum</option>
-                        <option value="count">Compte</option>
+                        <option value="count">Count</option>
                       </select>
                     </div>
                   </>
@@ -538,16 +537,16 @@ const ChartCreate: React.FC = () => {
             </div>
           )}
 
-          {/* Sélection de pays/régions */}
+          {/* Country/Region Selection */}
           {selectedIndex && availableCountries.length > 0 && (
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-100">
               <div className="flex items-center gap-2 mb-4">
                 <Globe className="w-5 h-5 text-blue-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Filtres géographiques</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Geographic Filters</h2>
               </div>
               
               <p className="text-sm text-gray-600 mb-4">
-                Sélectionnez les pays/régions à visualiser. Laissez vide pour inclure tous les pays.
+                Select the countries/regions to visualize. Leave empty to include all countries.
               </p>
 
               <div className="mb-4">
@@ -555,7 +554,7 @@ const ChartCreate: React.FC = () => {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
                     type="text"
-                    placeholder="Rechercher un pays..."
+                    placeholder="Search for a country..."
                     value={countrySearchTerm}
                     onChange={(e) => setCountrySearchTerm(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -565,7 +564,7 @@ const ChartCreate: React.FC = () => {
 
               <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg bg-white">
                 {loadingCountries ? (
-                  <div className="p-4 text-center text-gray-500">Chargement des pays...</div>
+                  <div className="p-4 text-center text-gray-500">Loading countries...</div>
                 ) : (
                   <>
                     {availableCountries
@@ -611,7 +610,7 @@ const ChartCreate: React.FC = () => {
                       c.value.toLowerCase().includes(countrySearchTerm.toLowerCase())
                     ).length === 0 && (
                       <div className="p-4 text-center text-gray-500">
-                        Aucun pays trouvé pour "{countrySearchTerm}"
+                        No country found for "{countrySearchTerm}"
                       </div>
                     )}
                   </>
@@ -623,14 +622,14 @@ const ChartCreate: React.FC = () => {
                   <div className="flex items-center gap-2 mb-2">
                     <Filter className="w-4 h-4 text-blue-600" />
                     <span className="text-sm font-medium text-gray-700">
-                      {selectedCountries.length} pays sélectionné{selectedCountries.length > 1 ? 's' : ''}
+                      {selectedCountries.length} country{selectedCountries.length > 1 ? 's' : ''} selected
                     </span>
                     <button
                       type="button"
                       onClick={() => setSelectedCountries([])}
                       className="ml-auto text-xs text-blue-600 hover:text-blue-800"
                     >
-                      Tout désélectionner
+                      Deselect all
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -659,16 +658,16 @@ const ChartCreate: React.FC = () => {
             </div>
           )}
 
-          {/* Filtres par année */}
+          {/* Year Filter */}
           {selectedIndex && availableYears.length > 0 && (
             <div className="bg-purple-50 rounded-lg p-6 border border-purple-100">
               <div className="flex items-center gap-2 mb-4">
                 <Filter className="w-5 h-5 text-purple-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Filtre par année</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Year Filter</h2>
               </div>
               
               <div className="space-y-4">
-                {/* Option 1: Plage d'années (Min-Max) */}
+                {/* Option 1: Year Range (Min-Max) */}
                 <div>
                   <label className="flex items-center gap-2 mb-3">
                     <input
@@ -689,14 +688,14 @@ const ChartCreate: React.FC = () => {
                       }}
                       className="w-4 h-4 text-purple-600"
                     />
-                    <span className="text-sm font-medium text-gray-900">Utiliser une plage d'années (recommandé)</span>
+                    <span className="text-sm font-medium text-gray-900">Use a year range (recommended)</span>
                   </label>
                   
                   {formData.filters?.year && typeof formData.filters.year === 'object' && formData.filters.year.min !== undefined && (
                     <div className="ml-6 grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Année de début
+                          Start Year
                         </label>
                         <select
                           value={formData.filters.year.min}
@@ -723,7 +722,7 @@ const ChartCreate: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Année de fin
+                          End Year
                         </label>
                         <select
                           value={formData.filters.year.max}
@@ -753,11 +752,11 @@ const ChartCreate: React.FC = () => {
                       <div className="col-span-2">
                         <div className="bg-white p-3 rounded border border-purple-200">
                           <p className="text-sm text-gray-700">
-                            <span className="font-medium">Plage sélectionnée:</span>{' '}
+                            <span className="font-medium">Selected range:</span>{' '}
                             <span className="text-purple-600">
                               {formData.filters.year.min} - {formData.filters.year.max}
                             </span>
-                            {' '}({formData.filters.year.max - formData.filters.year.min + 1} années)
+                            {' '}({formData.filters.year.max - formData.filters.year.min + 1} years)
                           </p>
                         </div>
                       </div>
@@ -765,7 +764,7 @@ const ChartCreate: React.FC = () => {
                   )}
                 </div>
 
-                {/* Option 2: Sélection multiple */}
+                {/* Option 2: Multiple Selection */}
                 <div className="border-t border-purple-200 pt-4">
                   <label className="flex items-center gap-2 mb-3">
                     <input
@@ -782,13 +781,13 @@ const ChartCreate: React.FC = () => {
                       }}
                       className="w-4 h-4 text-purple-600"
                     />
-                    <span className="text-sm font-medium text-gray-900">Sélectionner des années spécifiques</span>
+                    <span className="text-sm font-medium text-gray-900">Select specific years</span>
                   </label>
 
                   {(!formData.filters?.year || Array.isArray(formData.filters.year) || (!formData.filters.year.min && selectedYears.length > 0)) && (
                     <div className="ml-6">
                       <p className="text-xs text-gray-600 mb-3">
-                        Cochez les années à inclure. Laissez vide pour inclure toutes les années.
+                        Check the years to include. Leave empty to include all years.
                       </p>
                       <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg bg-white p-3">
                         <div className="grid grid-cols-4 gap-2">
@@ -842,7 +841,7 @@ const ChartCreate: React.FC = () => {
                             onClick={() => setSelectedYears([])}
                             className="text-xs text-purple-600 hover:text-purple-800"
                           >
-                            Tout désélectionner
+                            Deselect all
                           </button>
                         </div>
                       )}
@@ -850,7 +849,7 @@ const ChartCreate: React.FC = () => {
                   )}
                 </div>
 
-                {/* Option 3: Aucun filtre */}
+                {/* Option 3: No Filter */}
                 <div className="border-t border-purple-200 pt-4">
                   <label className="flex items-center gap-2">
                     <input
@@ -867,23 +866,23 @@ const ChartCreate: React.FC = () => {
                       }}
                       className="w-4 h-4 text-purple-600"
                     />
-                    <span className="text-sm font-medium text-gray-900">Aucun filtre (toutes les années)</span>
+                    <span className="text-sm font-medium text-gray-900">No filter (all years)</span>
                   </label>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Filtres par élément */}
+          {/* Element Filter */}
           {selectedIndex && availableElements.length > 0 && (
             <div className="bg-green-50 rounded-lg p-6 border border-green-100">
               <div className="flex items-center gap-2 mb-4">
                 <Filter className="w-5 h-5 text-green-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Filtre par élément</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Element Filter</h2>
               </div>
               
               <p className="text-sm text-gray-600 mb-4">
-                Sélectionnez le type de mesure à visualiser (Production, Area harvested, Yield, etc.)
+                Select the type of measurement to visualize (Production, Area harvested, Yield, etc.)
               </p>
 
               <div className="mb-4">
@@ -891,7 +890,7 @@ const ChartCreate: React.FC = () => {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
                     type="text"
-                    placeholder="Rechercher un élément..."
+                    placeholder="Search for an element..."
                     value={elementSearchTerm}
                     onChange={(e) => setElementSearchTerm(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
@@ -961,16 +960,16 @@ const ChartCreate: React.FC = () => {
             </div>
           )}
 
-          {/* Filtres par produit */}
+          {/* Product Filter */}
           {selectedIndex && availableItems.length > 0 && (
             <div className="bg-orange-50 rounded-lg p-6 border border-orange-100">
               <div className="flex items-center gap-2 mb-4">
                 <Filter className="w-5 h-5 text-orange-600" />
-                <h2 className="text-lg font-semibold text-gray-900">Filtre par produit</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Product Filter</h2>
               </div>
               
               <p className="text-sm text-gray-600 mb-4">
-                Sélectionnez les produits à inclure dans le graphique
+                Select the products to include in the chart
               </p>
 
               <div className="mb-4">
@@ -978,7 +977,7 @@ const ChartCreate: React.FC = () => {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
                     type="text"
-                    placeholder="Rechercher un produit..."
+                    placeholder="Search for a product..."
                     value={itemSearchTerm}
                     onChange={(e) => setItemSearchTerm(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -1048,10 +1047,10 @@ const ChartCreate: React.FC = () => {
             </div>
           )}
 
-          {/* Options de visualisation */}
+          {/* Visualization Options */}
           <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Options de visualisation</h2>
-            <p className="text-sm text-gray-600 mb-4">Personnalisez l'apparence du graphique</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Visualization Options</h2>
+            <p className="text-sm text-gray-600 mb-4">Customize the chart appearance</p>
             <div className="space-y-2">
               <label className="flex items-center">
                 <input
@@ -1066,7 +1065,7 @@ const ChartCreate: React.FC = () => {
                   }))}
                   className="mr-2"
                 />
-                Afficher la légende
+                Show legend
               </label>
 
               <label className="flex items-center">
@@ -1082,7 +1081,7 @@ const ChartCreate: React.FC = () => {
                   }))}
                   className="mr-2"
                 />
-                Afficher la grille
+                Show grid
               </label>
             </div>
           </div>
@@ -1094,7 +1093,7 @@ const ChartCreate: React.FC = () => {
               onClick={() => navigate('/charts')}
               className="px-6 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium"
             >
-              Annuler
+              Cancel
             </button>
             <button
               type="submit"
@@ -1102,7 +1101,7 @@ const ChartCreate: React.FC = () => {
               className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium shadow-md"
             >
               <Save className="w-4 h-4" />
-              {saving ? 'Enregistrement...' : (isEditMode ? 'Enregistrer les modifications' : 'Créer le graphique')}
+              {saving ? 'Saving...' : (isEditMode ? 'Save changes' : 'Create chart')}
             </button>
           </div>
         </form>

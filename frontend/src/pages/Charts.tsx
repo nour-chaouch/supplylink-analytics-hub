@@ -34,11 +34,11 @@ const Charts: React.FC = () => {
       if (response.data.success) {
         setCharts(response.data.data);
       } else {
-        setError(response.data.message || 'Erreur lors du chargement des graphiques');
+        setError(response.data.message || 'Error loading charts');
       }
     } catch (err: any) {
       console.error('Error fetching charts:', err);
-      setError(err.response?.data?.message || 'Erreur lors du chargement des graphiques');
+      setError(err.response?.data?.message || 'Error loading charts');
     } finally {
       setLoading(false);
     }
@@ -53,7 +53,7 @@ const Charts: React.FC = () => {
   };
 
   const handleDeleteChart = async (chartId: string) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce graphique ?')) {
+    if (!window.confirm('Are you sure you want to delete this chart?')) {
       return;
     }
 
@@ -62,7 +62,7 @@ const Charts: React.FC = () => {
       await fetchCharts();
     } catch (err: any) {
       console.error('Error deleting chart:', err);
-      alert('Erreur lors de la suppression du graphique');
+      alert('Error deleting the chart');
     }
   };
 
@@ -84,13 +84,13 @@ const Charts: React.FC = () => {
 
   const getChartTypeLabel = (type: string) => {
     const labels: { [key: string]: string } = {
-      bar: 'Barres',
-      line: 'Courbes',
-      pie: 'Camembert',
-      doughnut: 'Donut',
-      area: 'Aires',
-      scatter: 'Nuage de points',
-      table: 'Tableau'
+      bar: 'Bars',
+      line: 'Lines',
+      pie: 'Pie',
+      doughnut: 'Doughnut',
+      area: 'Area',
+      scatter: 'Scatter',
+      table: 'Table'
     };
     return labels[type] || type;
   };
@@ -100,7 +100,7 @@ const Charts: React.FC = () => {
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center h-64">
-            <div className="text-gray-500">Chargement des graphiques...</div>
+            <div className="text-gray-500">Loading charts...</div>
           </div>
         </div>
       </div>
@@ -117,7 +117,7 @@ const Charts: React.FC = () => {
               onClick={fetchCharts}
               className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
             >
-              Réessayer
+              Try Again
             </button>
           </div>
         </div>
@@ -130,15 +130,15 @@ const Charts: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Mes Graphiques</h1>
-            <p className="text-gray-600 mt-1">Gérez et visualisez vos graphiques créés</p>
+            <h1 className="text-3xl font-bold text-gray-900">My Charts</h1>
+            <p className="text-gray-600 mt-1">Manage and view your created charts</p>
           </div>
           <button
             onClick={() => navigate('/charts/create')}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
           >
             <Plus className="w-5 h-5" />
-            Créer un Graphique
+            Create Chart
           </button>
         </div>
 
@@ -146,16 +146,16 @@ const Charts: React.FC = () => {
           <div className="bg-white rounded-lg shadow p-12 text-center">
             <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Aucun graphique créé
+              No charts created
             </h3>
             <p className="text-gray-600 mb-6">
-              Créez votre premier graphique pour commencer à visualiser vos données
+              Create your first chart to start visualizing your data
             </p>
             <button
               onClick={() => navigate('/charts/create')}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
-              Créer mon premier graphique
+              Create my first chart
             </button>
           </div>
         ) : (
@@ -207,19 +207,19 @@ const Charts: React.FC = () => {
                     onClick={() => handleViewChart(chart.id)}
                     className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm"
                   >
-                    Voir
+                    View
                   </button>
                   <button
                     onClick={() => handleEditChart(chart.id)}
                     className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition text-sm"
                   >
-                    Modifier
+                    Edit
                   </button>
                   <button
                     onClick={() => handleDeleteChart(chart.id)}
                     className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition text-sm"
                   >
-                    Supprimer
+                    Delete
                   </button>
                 </div>
               </div>
@@ -232,4 +232,3 @@ const Charts: React.FC = () => {
 };
 
 export default Charts;
-

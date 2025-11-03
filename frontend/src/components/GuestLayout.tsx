@@ -29,6 +29,7 @@ const GuestLayout: React.FC = () => {
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Search & Analytics', href: '/search', icon: Search },
+    
   ];
 
   const handleLogout = () => {
