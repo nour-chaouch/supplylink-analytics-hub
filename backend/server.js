@@ -76,6 +76,9 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/faostat', faostatRoutes);
 app.use('/api/agricultural', require('./routes/agriculturalDataRoutes'));
 app.use('/api/charts', require('./routes/chartConfigurationRoutes'));
+app.use('/api/events', require('./routes/eventRoutes'));
+app.use('/api/teams', require('./routes/teamRoutes'));
+
 
 // Debug middleware for admin routes
 app.use('/api/admin', (req, res, next) => {

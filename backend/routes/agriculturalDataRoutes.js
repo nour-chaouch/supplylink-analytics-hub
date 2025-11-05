@@ -481,42 +481,99 @@ router.get('/indices/:indexName/search', async (req, res) => {
     
     // Add filters with proper field type handling
     Object.keys(filters).forEach(filterKey => {
-      if (filters[filterKey] && filters[filterKey].trim()) {
-        const field = properties[filterKey];
-        const filterValue = filters[filterKey].trim();
-        
-        if (field) {
-          if (field.type === 'keyword' || field.type === 'text') {
+      const filterValue = filters[filterKey];
+      if (!filterValue) return;
+      
+      // Handle array values (from query params like ?element=value1&element=value2)
+      const values = Array.isArray(filterValue) ? filterValue : [filterValue];
+      const validValues = values.filter(v => v && String(v).trim());
+      
+      if (validValues.length === 0) return;
+      
+      // Try exact match first, then lowercase/TitleCase variants
+      let field = properties[filterKey];
+      let actualFieldName = filterKey;
+      
+      if (!field) {
+        // Try lowercase variant
+        const lowerKey = filterKey.toLowerCase();
+        if (properties[lowerKey]) {
+          field = properties[lowerKey];
+          actualFieldName = lowerKey;
+        } else {
+          // Try TitleCase variant
+          const titleKey = filterKey.charAt(0).toUpperCase() + filterKey.slice(1).toLowerCase();
+          if (properties[titleKey]) {
+            field = properties[titleKey];
+            actualFieldName = titleKey;
+          }
+        }
+      }
+      
+      if (field) {
+        if (field.type === 'keyword' || field.type === 'text') {
+          if (validValues.length === 1) {
             mustQueries.push({
               term: {
-                [filterKey]: {
-                  value: filterValue,
+                [actualFieldName]: {
+                  value: String(validValues[0]).trim(),
                   case_insensitive: true
                 }
               }
             });
-          } else if (field.type === 'integer' || field.type === 'long') {
-            const numericValue = parseInt(filterValue);
-            if (!isNaN(numericValue)) {
+          } else {
+            mustQueries.push({
+              terms: {
+                [actualFieldName]: validValues.map(v => String(v).trim()),
+                case_insensitive: true
+              }
+            });
+          }
+        } else if (field.type === 'integer' || field.type === 'long') {
+          const numericValues = validValues.map(v => parseInt(String(v))).filter(v => !isNaN(v));
+          if (numericValues.length > 0) {
+            if (numericValues.length === 1) {
               mustQueries.push({
                 term: {
-                  [filterKey]: numericValue
+                  [actualFieldName]: numericValues[0]
+                }
+              });
+            } else {
+              mustQueries.push({
+                terms: {
+                  [actualFieldName]: numericValues
                 }
               });
             }
-          } else if (field.type === 'float' || field.type === 'double') {
-            const numericValue = parseFloat(filterValue);
-            if (!isNaN(numericValue)) {
+          }
+        } else if (field.type === 'float' || field.type === 'double') {
+          const numericValues = validValues.map(v => parseFloat(String(v))).filter(v => !isNaN(v));
+          if (numericValues.length > 0) {
+            if (numericValues.length === 1) {
               mustQueries.push({
                 term: {
-                  [filterKey]: numericValue
+                  [actualFieldName]: numericValues[0]
+                }
+              });
+            } else {
+              mustQueries.push({
+                terms: {
+                  [actualFieldName]: numericValues
                 }
               });
             }
-          } else if (field.type === 'date') {
+          }
+        } else if (field.type === 'date') {
+          if (validValues.length === 1) {
             mustQueries.push({
               term: {
-                [filterKey]: filterValue
+                [actualFieldName]: String(validValues[0]).trim()
+              }
+            });
+          } else {
+            mustQueries.push({
+              terms: {
+                [actualFieldName]: validValues.map(v => String(v).trim())
               }
             });
           }
@@ -858,6 +915,71 @@ router.get('/analytics', async (req, res) => {
       }
     });
   } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST: Term aggregation with optional filters
+router.post('/indices/:indexName/terms', async (req, res) => {
+  try {
+    const { indexName } = req.params;
+    const { field, size = 50, filters = {} } = req.body || {};
+
+    if (!field) {
+      return res.status(400).json({ success: false, message: 'field is required' });
+    }
+
+    const ElasticsearchService = require('../services/ElasticsearchService');
+    const esService = new ElasticsearchService();
+    const client = esService.client;
+
+    if (!client) {
+      return res.status(500).json({ success: false, message: 'Elasticsearch client not initialized' });
+    }
+
+    const indexExists = await client.indices.exists({ index: indexName });
+    if (!indexExists) {
+      return res.status(404).json({ success: false, message: 'Index not found' });
+    }
+
+    // Build filter query
+    const must = [];
+    if (filters && typeof filters === 'object') {
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v === undefined || v === null || v === '') return;
+        if (Array.isArray(v)) {
+          must.push({ terms: { [k]: v } });
+        } else if (typeof v === 'object' && v.min !== undefined && v.max !== undefined) {
+          must.push({ range: { [k]: { gte: v.min, lte: v.max } } });
+        } else {
+          must.push({ term: { [k]: v } });
+        }
+      });
+    }
+
+    const body = {
+      size: 0,
+      query: must.length ? { bool: { must } } : { match_all: {} },
+      aggs: {
+        terms_agg: {
+          terms: {
+            field: field,
+            size: parseInt(size),
+            order: { _count: 'desc' }
+          }
+        }
+      }
+    };
+
+    const response = await client.search({ index: indexName, body });
+    const buckets = response.aggregations?.terms_agg?.buckets || [];
+
+    res.json({
+      success: true,
+      data: buckets.map(b => ({ value: b.key, count: b.doc_count }))
+    });
+  } catch (error) {
+    console.error('Terms aggregation error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
