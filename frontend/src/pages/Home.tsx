@@ -63,6 +63,7 @@ const Home: React.FC = () => {
   const [indices, setIndices] = useState<IndexInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   // Icon mapping function
   const getIconComponent = (iconName: string) => {
@@ -110,12 +111,26 @@ const Home: React.FC = () => {
         const response = await agriculturalAPI.getIndices();
         if (response.data.success) {
           setIndices(response.data.data || []);
+          // Show warning if present
+          if (response.data.warning) {
+            setWarning(response.data.warning);
+            console.warn('Indices API warning:', response.data.warning);
+          } else {
+            setWarning(null);
+          }
         } else {
-          setError('Failed to load indices');
+          const errorMsg = response.data.message || 'Failed to load indices';
+          setError(errorMsg);
+          console.error('Failed to load indices:', response.data);
         }
       } catch (err: any) {
         console.error('Error fetching indices:', err);
-        setError('Failed to load indices');
+        const errorMessage = err.response?.data?.message 
+          || err.message 
+          || (err.code === 'ECONNREFUSED' ? 'Cannot connect to backend server. Make sure it is running on port 5001.'
+          : err.message?.includes('timeout') ? 'Request timed out. The server may be slow to respond.'
+          : 'Failed to load indices. Please check your connection and try again.');
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -175,7 +190,10 @@ const Home: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
       {/* Hero Section */}
       <div className="relative overflow-hidden" style={{ 
-        background: 'linear-gradient(to bottom right, #4f46e5, #005D00, #006400)' 
+        backgroundImage: "linear-gradient(to bottom right, rgba(79,70,229,0.35), rgba(0,93,0,0.45)), url('/background.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
       }}>
         {/* Animated Background Elements */}
         <div className="absolute inset-0 overflow-hidden">
@@ -313,7 +331,12 @@ const Home: React.FC = () => {
         ) : indices.length === 0 ? (
           <div className="text-center py-12">
             <Database className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-            <p className="text-gray-500">No indices available</p>
+            <p className="text-gray-500 mb-4">No indices available</p>
+            {warning && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-2xl mx-auto mt-4">
+                <p className="text-yellow-800 text-sm">{warning}</p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
@@ -395,7 +418,12 @@ const Home: React.FC = () => {
       </div>
 
       {/* Stats Section */}
-      <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 py-24 relative overflow-hidden">
+      <div className="py-24 relative overflow-hidden" style={{
+        backgroundImage: "url('/footer.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}>
         {/* Background Pattern */}
         <div className="absolute inset-0 opacity-5">
           <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">

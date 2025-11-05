@@ -19,9 +19,24 @@ module.exports = function(app) {
       logLevel: 'debug',
       onError: (err, req, res) => {
         console.error('Proxy error:', err.message);
-        res.status(500).json({ 
+        console.error('Error code:', err.code);
+        console.error('Full error:', err);
+        
+        // Provide more helpful error messages based on error type
+        let errorMessage = 'Backend server may not be running on port 5001';
+        if (err.code === 'ECONNREFUSED') {
+          errorMessage = 'Connection refused - Backend server is not running on port 5001. Please start it with: cd backend && npm start';
+        } else if (err.code === 'ETIMEDOUT') {
+          errorMessage = 'Connection timeout - Backend server may be slow to respond or not running';
+        } else if (err.code === 'ENOTFOUND') {
+          errorMessage = 'Cannot resolve localhost - Network configuration issue';
+        }
+        
+        res.status(503).json({ 
           error: 'Proxy error', 
-          message: 'Backend server may not be running on port 5001' 
+          message: errorMessage,
+          code: err.code,
+          details: process.env.NODE_ENV === 'development' ? err.message : undefined
         });
       },
       onProxyReq: (proxyReq, req, res) => {

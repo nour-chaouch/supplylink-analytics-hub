@@ -55,8 +55,8 @@ export const authAPI = {
   login: (credentials: { email: string; password: string }) =>
     api.post('/users/signin', credentials),
 
-  // Register user
-  register: (userData: { name: string; email: string; password: string; role: string }) =>
+  // Register user (role defaults to user on backend)
+  register: (userData: { name: string; email: string; password: string }) =>
     api.post('/users/signup', userData),
 
   // Get user profile
@@ -332,5 +332,24 @@ export const agriculturalAPI = {
 
 // Health check
 export const healthCheck = () => api.get('/health');
+
+// Business Directory API
+export const businessAPI = {
+  // Get all businesses with filters
+  getBusinesses: (params = {}) =>
+    api.get('/businesses', { params }),
+
+  // Get business by ID
+  getBusiness: (id: string) =>
+    api.get(`/businesses/${id}`),
+
+  // Get categories
+  getCategories: () =>
+    api.get('/businesses/categories/list'),
+
+  // Get industries
+  getIndustries: () =>
+    api.get('/businesses/industries/list'),
+};
 
 export default api;

@@ -1,14 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const { getElasticsearchClient } = require('../config/elasticsearch');
+const { getElasticsearchClient, reinitializeElasticsearch } = require('../config/elasticsearch');
 
 const BUSINESS_INDEX = 'business_directory';
 
 // Helper function to ensure index exists
 const ensureIndexExists = async () => {
-  const client = getElasticsearchClient();
+  let client = getElasticsearchClient();
+  
+  // Try to reconnect if client is not initialized
   if (!client) {
-    throw new Error('Elasticsearch client not initialized');
+    console.log('Elasticsearch client not initialized, attempting to reconnect...');
+    client = await reinitializeElasticsearch();
+    
+    if (!client) {
+      throw new Error('Elasticsearch client not initialized. Please ensure Elasticsearch is running.');
+    }
   }
 
   try {
@@ -75,7 +82,21 @@ const ensureIndexExists = async () => {
 router.get('/', async (req, res) => {
   try {
     await ensureIndexExists();
-    const client = getElasticsearchClient();
+    let client = getElasticsearchClient();
+    
+    // Try to reconnect if client is not initialized
+    if (!client) {
+      console.log('Elasticsearch client not initialized, attempting to reconnect...');
+      client = await reinitializeElasticsearch();
+      
+      if (!client) {
+        return res.status(503).json({ 
+          success: false, 
+          message: 'Elasticsearch client not initialized. Please ensure Elasticsearch is running.' 
+        });
+      }
+    }
+    
     const { q, category, industry, city, page = 1, limit = 50 } = req.query;
 
     const mustQueries = [];
@@ -132,7 +153,67 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting businesses:', error.message);
-    res.status(500).json({ success: false, message: error.message });
+    
+    // Try to reconnect on error
+    try {
+      const client = await reinitializeElasticsearch();
+      if (client) {
+        // Retry the request
+        await ensureIndexExists();
+        const retryClient = getElasticsearchClient();
+        const { q, category, industry, city, page = 1, limit = 50 } = req.query;
+        
+        const mustQueries = [];
+        if (q && q.trim()) {
+          mustQueries.push({
+            multi_match: {
+              query: q,
+              fields: ['name^3', 'description^2', 'products', 'services', 'tags'],
+              type: 'best_fields',
+              fuzziness: 'AUTO'
+            }
+          });
+        }
+        if (category) mustQueries.push({ term: { category } });
+        if (industry) mustQueries.push({ term: { industry } });
+        if (city) mustQueries.push({ term: { 'address.city': city } });
+        
+        const query = mustQueries.length > 0 ? { bool: { must: mustQueries } } : { match_all: {} };
+        
+        const response = await retryClient.search({
+          index: BUSINESS_INDEX,
+          body: {
+            query,
+            from: (page - 1) * limit,
+            size: parseInt(limit),
+            sort: [{ featured: { order: 'desc' } }, { createdAt: { order: 'desc' } }]
+          }
+        });
+        
+        const businesses = response.hits.hits.map(hit => ({
+          _id: hit._id,
+          ...hit._source
+        }));
+        
+        return res.json({
+          success: true,
+          data: businesses,
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total: response.hits.total.value,
+            pages: Math.ceil(response.hits.total.value / parseInt(limit))
+          }
+        });
+      }
+    } catch (reconnectError) {
+      // Reconnection failed
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: `Failed to get businesses: ${error.message}. Please ensure Elasticsearch is running.` 
+    });
   }
 });
 
@@ -251,7 +332,20 @@ router.delete('/:id', async (req, res) => {
 // Get categories
 router.get('/categories/list', async (req, res) => {
   try {
-    const client = getElasticsearchClient();
+    let client = getElasticsearchClient();
+    
+    // Try to reconnect if client is not initialized
+    if (!client) {
+      console.log('Elasticsearch client not initialized, attempting to reconnect...');
+      client = await reinitializeElasticsearch();
+      
+      if (!client) {
+        return res.status(503).json({ 
+          success: false, 
+          message: 'Elasticsearch client not initialized. Please ensure Elasticsearch is running.' 
+        });
+      }
+    }
     
     const response = await client.search({
       index: BUSINESS_INDEX,
@@ -268,24 +362,41 @@ router.get('/categories/list', async (req, res) => {
       }
     });
 
-    const categories = response.aggregations.categories.buckets.map(bucket => ({
+    const categories = response.aggregations?.categories?.buckets?.map(bucket => ({
       name: bucket.key,
       count: bucket.doc_count
-    }));
+    })) || [];
 
     res.json({
       success: true,
       data: categories
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error getting categories:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: `Failed to get categories: ${error.message}. Please ensure Elasticsearch is running.` 
+    });
   }
 });
 
 // Get industries
 router.get('/industries/list', async (req, res) => {
   try {
-    const client = getElasticsearchClient();
+    let client = getElasticsearchClient();
+    
+    // Try to reconnect if client is not initialized
+    if (!client) {
+      console.log('Elasticsearch client not initialized, attempting to reconnect...');
+      client = await reinitializeElasticsearch();
+      
+      if (!client) {
+        return res.status(503).json({ 
+          success: false, 
+          message: 'Elasticsearch client not initialized. Please ensure Elasticsearch is running.' 
+        });
+      }
+    }
     
     const response = await client.search({
       index: BUSINESS_INDEX,
@@ -302,17 +413,21 @@ router.get('/industries/list', async (req, res) => {
       }
     });
 
-    const industries = response.aggregations.industries.buckets.map(bucket => ({
+    const industries = response.aggregations?.industries?.buckets?.map(bucket => ({
       name: bucket.key,
       count: bucket.doc_count
-    }));
+    })) || [];
 
     res.json({
       success: true,
       data: industries
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error getting industries:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: `Failed to get industries: ${error.message}. Please ensure Elasticsearch is running.` 
+    });
   }
 });
 
@@ -360,5 +475,12 @@ router.post('/bulk', async (req, res) => {
 });
 
 module.exports = router;
+
+
+
+
+
+
+
 
 

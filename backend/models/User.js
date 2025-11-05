@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: ['admin', 'user'],
-    required: [true, 'Please specify a role']
+    default: 'user'
   },
   phone: {
     type: String,
@@ -65,7 +65,102 @@ const userSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+const BusinessSchema = new mongoose.Schema({
+  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  email: { type: String, unique: true, required: true },
+  name: { type: String, required: true },
+  department: { type: String, required: true, enum: Object.keys(GlobalOptions.departments) },
+  subDepartment: { type: String, required: true, enum: [].concat(...Object.values(GlobalOptions.departments)) },
+  logo: { type: String, default: null },
+  address: {
+      street: { type: String, required: true },
+      city: { type: String, required: true },
+      state: { type: String, required: true },
+      zipCode: { type: String, required: true },
+      country: { type: String, required: true },
+  },
+  phone: { type: String, required: true },
+  socialMedia: {
+      facebook: { type: String, default: "" },
+      twitter: { type: String, default: "" },
+      linkedin: { type: String, default: "" },
+      instagram: { type: String, default: "" },
+  },
+  website: { type: String, default: "" },
+  description: { type: String, default: "" },
+  creationYear: { type: Number, required: true },
+  registrationNumber: { type: String, required: true },
+  taxId: { type: String, required: true },
+  annualRevenue: { type: Number, default: 0 },
+  currency: { type: String, default: "USD" },
+  numberOfEmployees: {
+      type: Number,
+      enum: GlobalOptions.employeesRange,
+      default: 0
+  },
+  documents: {
+      certificate: { type: String, default: null },
+      license: { type: String, default: null },
+  },
+  status: {
+      type: String,
+      enum: GlobalOptions.businessStatuses,
+      required: true
+  },
+  openingHours: {
+      type: [
+          {
+              day: {
+                  type: String,
+                  required: true,
+                  enum: GlobalOptions.days,
+              },
+              open: {
+                  type: String,
+                  default: null,
+              },
+              close: {
+                  type: String,
+                  default: null,
+              },
+              isOpen: {
+                  type: Boolean,
+                  default: false,
+              },
+          },
+      ],
+      default: [
+          { day: "monday", open: null, close: null, isOpen: false },
+          { day: "tuesday", open: null, close: null, isOpen: false },
+          { day: "wednesday", open: null, close: null, isOpen: false },
+          { day: "thursday", open: null, close: null, isOpen: false },
+          { day: "friday", open: null, close: null, isOpen: false },
+          { day: "saturday", open: null, close: null, isOpen: false },
+          { day: "sunday", open: null, close: null, isOpen: false },
+      ],
+  },
+  location: { type: [Number], default: [0, 0] },
+  isActive: {
+      type: Boolean,
+      default: false,
+  },
+  isActiveAt: { type: Date, default: null },
+  createdAt: { type: Date, default: Date.now },
 
+
+  users: [{
+      user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+      },
+      permissions: [{
+          type: String,
+      }]
+  }]
+})
+export const Business = mongoose.model("Business", BusinessSchema)
+
+business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business' },
 // Encrypt password using bcrypt
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) {

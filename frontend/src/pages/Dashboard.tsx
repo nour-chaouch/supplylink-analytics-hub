@@ -65,7 +65,7 @@ const Dashboard: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900">SupplyLink Analytics Hub</h1>
           <p className="text-gray-600">Welcome back, {user?.name || 'User'}! Here's your agricultural data overview.</p>
         </div>
-        <button className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors">
+        <button className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
           Export Data
         </button>
       </div>

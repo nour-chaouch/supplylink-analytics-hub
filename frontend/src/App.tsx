@@ -12,6 +12,8 @@ import Register from './pages/Register';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import Search from './pages/Search';
+import BusinessDirectory from './pages/BusinessDirectory';
+import BusinessDetail from './pages/BusinessDetail';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import ElasticsearchAdmin from './pages/ElasticsearchAdmin';
@@ -43,6 +45,8 @@ function App() {
                     <Route index element={<Home />} />
                     <Route path="search" element={<Search />} />
                     <Route path="analytics" element={<Search initialTab="analytics" />} />
+                    <Route path="businesses" element={<BusinessDirectory />} />
+                    <Route path="businesses/:id" element={<BusinessDetail />} />
                   </Route>
                   
                   {/* Authenticated routes - require login */}

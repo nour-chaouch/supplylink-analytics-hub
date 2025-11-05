@@ -74,9 +74,16 @@ const getElasticsearchClient = () => {
   return elasticsearchClient;
 };
 
+// Reinitialize Elasticsearch connection (useful if Elasticsearch was down at startup)
+const reinitializeElasticsearch = async () => {
+  console.log('Reinitializing Elasticsearch connection...');
+  return await initializeElasticsearch();
+};
+
 module.exports = {
   createElasticsearchClient,
   testElasticsearchConnection,
   initializeElasticsearch,
-  getElasticsearchClient
+  getElasticsearchClient,
+  reinitializeElasticsearch
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { agriculturalAPI } from '../services/api';
@@ -119,6 +120,7 @@ const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [totalResults, setTotalResults] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   
@@ -260,16 +262,32 @@ const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
     try {
       const response = await agriculturalAPI.getIndices();
       if (response.data.success) {
-        setIndices(response.data.data);
+        setIndices(response.data.data || []);
+        // Show warning if present
+        if (response.data.warning) {
+          setWarning(response.data.warning);
+          console.warn('Indices API warning:', response.data.warning);
+        } else {
+          setWarning(null);
+        }
         // Auto-select first available index
-        const availableIndex = response.data.data.find((index: Index) => index.status === 'available');
+        const availableIndex = response.data.data?.find((index: Index) => index.status === 'available');
         if (availableIndex) {
           setSelectedIndex(availableIndex.name);
         }
+      } else {
+        const errorMsg = response.data.message || 'Failed to load available indices';
+        setError(errorMsg);
+        console.error('Failed to load indices:', response.data);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load indices:', err);
-      setError('Failed to load available indices');
+      const errorMessage = err.response?.data?.message 
+        || err.message 
+        || (err.code === 'ECONNREFUSED' ? 'Cannot connect to backend server. Make sure it is running on port 5001.'
+        : err.message?.includes('timeout') ? 'Request timed out. The server may be slow to respond.'
+        : 'Failed to load available indices. Please check your connection and try again.');
+      setError(errorMessage);
     }
   };
 
@@ -1302,7 +1320,7 @@ const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
           <p className="text-gray-600">Search and analyze data across all available indices</p>
         </div>
         <button 
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors flex items-center"
+          className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors flex items-center"
           disabled={(results?.length || 0) === 0}
         >
           <Download className="h-4 w-4 mr-2" />
@@ -1346,12 +1364,22 @@ const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
         </div>
         
         <div className="p-6">
+          {warning && (
+            <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm text-yellow-800">{warning}</p>
+                </div>
+              </div>
+            </div>
+          )}
           {indices.length === 0 ? (
             <div className="text-center py-8">
               <Database className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No indices available</h3>
               <p className="mt-1 text-sm text-gray-500">
-                No Elasticsearch indices found. Please check your Elasticsearch connection.
+                {warning || 'No Elasticsearch indices found. Please check your Elasticsearch connection.'}
               </p>
             </div>
           ) : (
@@ -1483,7 +1511,7 @@ const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
                 <button
                   onClick={handleSearch}
                   disabled={loading}
-                  className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {loading ? 'Searching...' : 'Search'}
                 </button>
@@ -1634,7 +1662,7 @@ const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
               <button
                 onClick={loadAnalytics}
                 disabled={analyticsLoading}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {analyticsLoading ? 'Loading...' : 'Load Analytics'}
               </button>
@@ -1939,7 +1967,7 @@ const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
                       <p className="text-sm text-gray-500 mb-4">Click the configure button on any chart to edit its settings</p>
                               <button
                         onClick={createNewChart}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors"
                               >
                         Create New Chart
                               </button>
@@ -2993,7 +3021,7 @@ const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
                           disabled={loading}
                           className={`px-3 py-1 text-sm border rounded ${
                             i === currentPage
-                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              ? 'bg-green-600 text-white border-green-600'
                               : 'border-gray-300 hover:bg-gray-50'
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >

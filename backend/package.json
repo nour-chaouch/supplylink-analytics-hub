@@ -18,6 +18,8 @@
     "test-elasticsearch-admin": "node scripts/testElasticsearchAdmin.js",
     "test-index-metadata": "node scripts/testIndexMetadata.js",
     "test-filter-values": "node scripts/testFilterValues.js",
+    "check-backend": "node check-backend.js",
+    "check-elasticsearch": "node check-elasticsearch.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

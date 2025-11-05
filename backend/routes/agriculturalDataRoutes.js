@@ -49,20 +49,70 @@ router.get('/indices', async (req, res) => {
       }
     }
     
-    // Get all indices from Elasticsearch
-    const indicesResponse = await client.cat.indices({ format: 'json' });
-    
-    // Filter out system indices
-    const elasticsearchIndices = indicesResponse
-      .filter(index => !index.index.startsWith('.') && !index.index.startsWith('_'))
-      .map(index => ({
-        name: index.index,
-        documentCount: parseInt(index['docs.count']) || 0,
-        status: index.status === 'open' ? 'available' : 'not_available',
-        health: index.health,
-        size: index['store.size'],
-        lastModified: index['creation.date.string'] || null
-      }));
+    // Try to get indices from Elasticsearch, but handle connection errors gracefully
+    let elasticsearchIndices = [];
+    try {
+      // Get all indices from Elasticsearch
+      const indicesResponse = await client.cat.indices({ format: 'json' });
+      
+      // Filter out system indices
+      elasticsearchIndices = indicesResponse
+        .filter(index => !index.index.startsWith('.') && !index.index.startsWith('_'))
+        .map(index => ({
+          name: index.index,
+          documentCount: parseInt(index['docs.count']) || 0,
+          status: index.status === 'open' ? 'available' : 'not_available',
+          health: index.health,
+          size: index['store.size'],
+          lastModified: index['creation.date.string'] || null
+        }));
+    } catch (esError) {
+      // Elasticsearch connection error - check if it's a connection issue
+      const isConnectionError = esError.message?.includes('ECONNREFUSED') || 
+                                esError.message?.includes('connect') ||
+                                esError.message?.includes('timeout') ||
+                                esError.name === 'ConnectionError';
+      
+      if (isConnectionError) {
+        console.log('⚠️  Elasticsearch connection error:', esError.message);
+        // Fall back to MongoDB metadata if available
+        try {
+          const IndexMetadata = require('../models/IndexMetadata');
+          const metadataList = await IndexMetadata.find({}).populate('createdBy', 'username email');
+          
+          const indices = metadataList.map(metadata => ({
+            name: metadata.indexName,
+            displayName: metadata.title || metadata.indexName,
+            description: metadata.description || `Data from ${metadata.indexName} index`,
+            icon: metadata.icon || 'Database',
+            documentCount: 0,
+            status: 'unknown',
+            health: 'unknown',
+            size: '0kb',
+            lastModified: null,
+            createdAt: metadata.createdAt,
+            updatedAt: metadata.updatedAt,
+            createdBy: metadata.createdBy,
+            hasMetadata: true
+          }));
+          
+          return res.json({
+            success: true,
+            data: indices,
+            warning: 'Elasticsearch is not running. Install and start Elasticsearch to see full index information.'
+          });
+        } catch (mongoError) {
+          return res.json({
+            success: true,
+            data: [],
+            warning: 'Elasticsearch is not running. Please install and start Elasticsearch. See ELASTICSEARCH_SETUP.md for instructions.'
+          });
+        }
+      } else {
+        // Other Elasticsearch errors - rethrow to be caught by outer catch
+        throw esError;
+      }
+    }
 
     // Get metadata from MongoDB
     let metadataMap = {};
@@ -110,6 +160,19 @@ router.get('/indices', async (req, res) => {
     });
   } catch (error) {
     console.error('Error loading indices:', error.message);
+    // Return a helpful error message instead of a generic 500
+    const isConnectionError = error.message?.includes('ECONNREFUSED') || 
+                              error.message?.includes('connect') ||
+                              error.message?.includes('timeout');
+    
+    if (isConnectionError) {
+      return res.json({
+        success: true,
+        data: [],
+        warning: 'Elasticsearch is not running. Please install and start Elasticsearch. See ELASTICSEARCH_SETUP.md for instructions.'
+      });
+    }
+    
     res.status(500).json({ success: false, message: error.message });
   }
 });

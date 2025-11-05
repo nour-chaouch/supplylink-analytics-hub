@@ -14,7 +14,8 @@ import {
   X,
   Home,
   LogIn,
-  Shield
+  Shield,
+  Briefcase
 } from 'lucide-react';
 
 const GuestLayout: React.FC = () => {
@@ -29,6 +30,7 @@ const GuestLayout: React.FC = () => {
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Search & Analytics', href: '/search', icon: Search },
+    { name: 'Business Directory', href: '/businesses', icon: Briefcase },
   ];
 
   const handleLogout = () => {
@@ -46,7 +48,7 @@ const GuestLayout: React.FC = () => {
             <div className="flex">
               {/* Logo */}
               <div className="flex-shrink-0 flex items-center">
-                <Link to="/" className="text-2xl font-bold text-indigo-600">
+                <Link to="/" className="text-2xl font-bold text-green-700">
                   {siteName}
                 </Link>
               </div>
@@ -55,15 +57,24 @@ const GuestLayout: React.FC = () => {
               <div className="hidden md:ml-6 md:flex md:space-x-8">
                 {navigation.map((item) => {
                   const Icon = item.icon;
+                  const isHomeItem = item.name === 'Home';
+                  const isBusinessItem = item.name === 'Business Directory';
+                  const colorClass = isActive(item.href)
+                    ? (isHomeItem
+                        ? 'border-green-600 text-green-700'
+                        : isBusinessItem
+                        ? 'border-green-600 text-green-700'
+                        : 'border-indigo-500 text-indigo-600')
+                    : (isHomeItem
+                        ? 'border-transparent text-green-700 hover:text-green-800 hover:border-green-300'
+                        : isBusinessItem
+                        ? 'border-transparent text-green-700 hover:text-green-800 hover:border-green-300'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300');
                   return (
                     <Link
                       key={item.name}
                       to={item.href}
-                      className={`${
-                        isActive(item.href)
-                          ? 'border-indigo-500 text-indigo-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      } inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors`}
+                      className={`${colorClass} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors`}
                     >
                       <Icon className="h-4 w-4 mr-2" />
                       {item.name}
@@ -111,7 +122,7 @@ const GuestLayout: React.FC = () => {
               ) : (
                 <Link
                   to="/login"
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors"
                 >
                   <LogIn className="h-4 w-4 mr-2" />
                   Login
@@ -143,14 +154,24 @@ const GuestLayout: React.FC = () => {
             <div className="pt-2 pb-3 space-y-1">
               {navigation.map((item) => {
                 const Icon = item.icon;
+                const isHomeItem = item.name === 'Home';
+                const isBusinessItem = item.name === 'Business Directory';
                 return (
                   <Link
                     key={item.name}
                     to={item.href}
                     className={`${
                       isActive(item.href)
-                        ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                        ? (isHomeItem
+                            ? 'bg-green-50 border-green-600 text-green-700'
+                            : isBusinessItem
+                            ? 'bg-green-50 border-green-600 text-green-700'
+                            : 'bg-indigo-50 border-indigo-500 text-indigo-700')
+                        : (isHomeItem
+                            ? 'border-transparent text-green-700 hover:text-green-800 hover:bg-green-50'
+                            : isBusinessItem
+                            ? 'border-transparent text-green-700 hover:text-green-800 hover:bg-green-50'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50')
                     } block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors`}
                     onClick={() => setMobileMenuOpen(false)}
                   >

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
-const { getElasticsearchClient } = require('../config/elasticsearch');
+const { getElasticsearchClient, reinitializeElasticsearch } = require('../config/elasticsearch');
 const { createIndex, deleteIndex, getIndexStats } = require('../config/elasticsearchMappings');
 const FilterValuesService = require('../services/FilterValuesService');
 
@@ -1553,14 +1553,47 @@ router.get('/supported-formats', async (req, res) => {
 });
 
 // Get Elasticsearch cluster health
-router.get('/health', async (req, res) => {
+// Reconnect to Elasticsearch endpoint
+router.post('/reconnect', async (req, res) => {
   try {
-    const client = getElasticsearchClient();
+    const client = await reinitializeElasticsearch();
     if (!client) {
       return res.status(500).json({ 
         success: false, 
-        message: 'Elasticsearch client not initialized' 
+        message: 'Failed to reconnect to Elasticsearch. Please ensure Elasticsearch is running on http://localhost:9200' 
       });
+    }
+    
+    // Test the connection
+    await client.ping();
+    
+    res.json({
+      success: true,
+      message: 'Successfully reconnected to Elasticsearch'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: `Failed to reconnect: ${error.message}. Please ensure Elasticsearch is running.` 
+    });
+  }
+});
+
+router.get('/health', async (req, res) => {
+  try {
+    let client = getElasticsearchClient();
+    
+    // Try to reconnect if client is not initialized
+    if (!client) {
+      console.log('Elasticsearch client not initialized, attempting to reconnect...');
+      client = await reinitializeElasticsearch();
+      
+      if (!client) {
+        return res.status(503).json({ 
+          success: false, 
+          message: 'Elasticsearch client not initialized. Elasticsearch may not be running. Please start Elasticsearch and try again, or use the /reconnect endpoint.' 
+        });
+      }
     }
 
     const health = await client.cluster.health();
@@ -1574,19 +1607,49 @@ router.get('/health', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    // Try to reconnect on error
+    console.log('Elasticsearch health check failed, attempting to reconnect...');
+    try {
+      const client = await reinitializeElasticsearch();
+      if (client) {
+        // Retry the request
+        const health = await client.cluster.health();
+        const indices = await client.cat.indices({ format: 'json' });
+        return res.json({
+          success: true,
+          data: {
+            clusterHealth: health,
+            indices: indices
+          }
+        });
+      }
+    } catch (reconnectError) {
+      // Reconnection failed
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: `Elasticsearch error: ${error.message}. Please ensure Elasticsearch is running on http://localhost:9200` 
+    });
   }
 });
 
 // Get all indices
 router.get('/indices', async (req, res) => {
   try {
-    const client = getElasticsearchClient();
+    let client = getElasticsearchClient();
+    
+    // Try to reconnect if client is not initialized
     if (!client) {
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Elasticsearch client not initialized' 
-      });
+      console.log('Elasticsearch client not initialized, attempting to reconnect...');
+      client = await reinitializeElasticsearch();
+      
+      if (!client) {
+        return res.status(503).json({ 
+          success: false, 
+          message: 'Elasticsearch client not initialized. Elasticsearch may not be running. Please start Elasticsearch and try again, or use the /reconnect endpoint.' 
+        });
+      }
     }
 
     const indices = await client.cat.indices({ format: 'json' });

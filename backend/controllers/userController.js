@@ -40,13 +40,13 @@ const registerUser = async (req, res) => {
       });
     }
 
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
     // Validate required fields
-    if (!name || !email || !password || !role) {
+    if (!name || !email || !password) {
       return res.status(400).json({ 
         success: false,
-        message: 'Please provide all required fields: name, email, password, role' 
+        message: 'Please provide all required fields: name, email, password' 
       });
     }
 
@@ -67,14 +67,8 @@ const registerUser = async (req, res) => {
       });
     }
 
-    // Validate role
-    const validRoles = ['admin', 'user'];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Invalid role. Must be either "admin" or "user"' 
-      });
-    }
+    // Default role for public signup
+    const role = 'user';
 
     // Check if user exists
     const userExists = await User.findOne({ email });
