@@ -23,6 +23,10 @@ import ProtectedRoute from './components/ProtectedRoute';
 import ChartCreate from './pages/ChartCreate';
 import AdminRoute from './components/AdminRoute';
 import RegistrationRoute from './components/RegistrationRoute';
+import EventsPage from './pages/EventsPage';
+import EventInterfacePage from './pages/EventInterfacePage';
+import UserLayout from './components/UserLayout';
+import TeamInviteAccept from './pages/TeamInviteAccept';
 
 function App() {
   return (
@@ -41,6 +45,13 @@ function App() {
                     </RegistrationRoute>
                   } />
                   
+                  {/* Team invite acceptance - requires auth */}
+                  <Route path="/teams/accept/:token" element={
+                    <ProtectedRoute>
+                      <TeamInviteAccept />
+                    </ProtectedRoute>
+                  } />
+                  
                   {/* Guest routes - accessible to all users */}
                   <Route path="/" element={<GuestLayout />}>
                     <Route index element={<Home />} />
@@ -52,27 +63,48 @@ function App() {
                     <ProtectedRoute>
                       <Layout />
                     </ProtectedRoute>
-                  }>
+                   }>
                     <Route index element={<Dashboard />} />
                   </Route>
 
-                  {/* Charts routes - require login */}
+                  {/* Events routes - require login, avec Layout */}
+                <Route path="/events" element={
+  <ProtectedRoute>
+    <UserLayout />
+  </ProtectedRoute>
+}>
+  <Route index element={<EventsPage />} />
+  <Route path=":eventId" element={<EventInterfacePage />} /> // Nouvelle route pour interface dédiée
+</Route>
+
+                  {/* Charts list and view use app Layout; create/edit standalone without sidebar */}
                   <Route path="/charts" element={
                     <ProtectedRoute>
                       <Layout />
                     </ProtectedRoute>
                   }>
                     <Route index element={<Charts />} />
-                    <Route path="create" element={<ChartCreate />} />
                     <Route path=":id" element={<ChartView />} />
-                    <Route path=":id/edit" element={<ChartCreate />} />
                   </Route>
+
+                  {/* Standalone full-screen routes for create/edit (no sidebar) */}
+                  <Route path="/charts/create" element={
+                    <ProtectedRoute>
+                      <ChartCreate />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/charts/:id/edit" element={
+                    <ProtectedRoute>
+                      <ChartCreate />
+                    </ProtectedRoute>
+                  } />
                   
                   {/* Admin routes - require authentication and admin role */}
                   <Route path="/admin" element={
                     <ProtectedRoute>
                       <AdminRoute>
                         <AdminLayout />
+                        
                       </AdminRoute>
                     </ProtectedRoute>
                   }>

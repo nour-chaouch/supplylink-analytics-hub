@@ -20,6 +20,9 @@ const ChartCreate: React.FC = () => {
   const [countrySearchTerm, setCountrySearchTerm] = useState('');
   const [loadingCountries, setLoadingCountries] = useState(false);
   const [countryFieldName, setCountryFieldName] = useState<string>('');
+  // Dynamic field names for element/item per index
+  const [elementFieldName, setElementFieldName] = useState<string>('');
+  const [itemFieldName, setItemFieldName] = useState<string>('');
   
   // States for additional filters
   const [availableYears, setAvailableYears] = useState<any[]>([]);
@@ -65,14 +68,43 @@ const ChartCreate: React.FC = () => {
       fetchCountriesForIndex(selectedIndex);
       fetchAdditionalFiltersForIndex(selectedIndex);
       setFormData(prev => ({ ...prev, indexName: selectedIndex }));
+
+      // Default domain constraint for QCL dataset to ensure correct elements/items
+      if (selectedIndex.toLowerCase().includes('crops') || selectedIndex.toLowerCase().includes('livestock')) {
+        setFormData(prev => {
+          // Do not override if user already set domain
+          if (prev.filters && (prev.filters.domain || prev.filters.Domain)) return prev;
+          return {
+            ...prev,
+            filters: { ...(prev.filters || {}), domain: 'Crops and livestock products' }
+          };
+        });
+      }
     }
   }, [selectedIndex]);
 
   useEffect(() => {
     // Update filters when selections change
     if (selectedIndex) {
+      const isQCL = selectedIndex.toLowerCase().includes('crops') || selectedIndex.toLowerCase().includes('livestock');
       setFormData(prev => {
         const newFilters = { ...prev.filters };
+
+        // Purge stale element-like keys except the active one
+        Object.keys(newFilters).forEach(key => {
+          const k = key.toLowerCase();
+          if ((k.includes('element') || k.includes('measure')) && key !== elementFieldName) {
+            delete (newFilters as any)[key];
+          }
+        });
+
+        // Purge stale item-like keys except the active one
+        Object.keys(newFilters).forEach(key => {
+          const k = key.toLowerCase();
+          if ((k.includes('item') || k.includes('product') || k.includes('commodity')) && key !== itemFieldName) {
+            delete (newFilters as any)[key];
+          }
+        });
         
         // Country filter
         if (countryFieldName) {
@@ -99,18 +131,24 @@ const ChartCreate: React.FC = () => {
           delete newFilters.year;
         }
         
-        // Element filter
-        if (selectedElements.length > 0) {
-          newFilters.element = selectedElements;
-        } else {
-          delete newFilters.element;
+        // Element filter (prefer lowercase key for QCL)
+        if (elementFieldName) {
+          const elementKeyToUse = isQCL ? 'element' : elementFieldName;
+          if (selectedElements.length > 0) {
+            newFilters[elementKeyToUse] = selectedElements;
+          } else {
+            delete (newFilters as any)[elementKeyToUse];
+          }
         }
-        
-        // Item filter
-        if (selectedItems.length > 0) {
-          newFilters.item = selectedItems;
-        } else {
-          delete newFilters.item;
+
+        // Item/Product filter (prefer lowercase key for QCL)
+        if (itemFieldName) {
+          const itemKeyToUse = isQCL ? 'item' : itemFieldName;
+          if (selectedItems.length > 0) {
+            newFilters[itemKeyToUse] = selectedItems;
+          } else {
+            delete (newFilters as any)[itemKeyToUse];
+          }
         }
         
         return {
@@ -178,29 +216,102 @@ const ChartCreate: React.FC = () => {
     try {
       const response = await agriculturalAPI.getAllIndexFilterValues(indexName, 5000);
       if (response.data.success && response.data.data.filterValues) {
-        if (response.data.data.filterValues.year) {
+        const fv = response.data.data.filterValues;
+        const fvKeys = Object.keys(fv);
+        const lowerKeys = fvKeys.map(k => k.toLowerCase());
+        console.log('[ChartCreate] Available filter keys for index', indexName, fvKeys);
+        if (fv.year) {
           const years = response.data.data.filterValues.year.values || [];
           setAvailableYears(years
             .map((item: any) => parseInt(item.value))
             .filter((year: number) => !isNaN(year))
             .sort((a: number, b: number) => b - a));
         }
-        
-        if (response.data.data.filterValues.element) {
-          const elements = response.data.data.filterValues.element.values || [];
-          setAvailableElements(elements.map((item: any) => ({
-            value: item.value,
-            count: item.count || 0
-          })));
+
+        // Detect dynamic element field: prefer exact text field over codes
+        const elementPriority = ['element', 'elementname', 'element_label', 'elementdescription', 'element_desc'];
+        let elementKey = '';
+        for (const cand of elementPriority) {
+          const idx = lowerKeys.indexOf(cand);
+          if (idx !== -1) { elementKey = fvKeys[idx]; break; }
         }
-        
-        if (response.data.data.filterValues.item) {
-          const items = response.data.data.filterValues.item.values || [];
-          setAvailableItems(items.map((item: any) => ({
-            value: item.value,
-            count: item.count || 0
-          })));
+        if (!elementKey) {
+          elementKey = fvKeys.find(key => key.toLowerCase().includes('element') && !key.toLowerCase().includes('code')) || '';
         }
+        if (!elementKey) {
+          elementKey = fvKeys.find(key => key.toLowerCase().includes('measure') && !key.toLowerCase().includes('code')) || '';
+        }
+        if (elementKey && fv[elementKey]) {
+          setElementFieldName(elementKey);
+          // If QCL, fetch counts via terms aggregation with domain filter using lowercase fields
+          if (indexName.toLowerCase().includes('crops') || indexName.toLowerCase().includes('livestock')) {
+            try {
+              const termsRes = await agriculturalAPI.getIndexTerms(indexName, {
+                field: 'element',
+                size: 50,
+                filters: { domain: 'Crops and livestock products' }
+              });
+              if (termsRes.data.success) {
+                setAvailableElements(termsRes.data.data);
+              } else {
+                setAvailableElements((fv[elementKey].values || []).map((item: any) => ({ value: item.value, count: item.count || 0 })));
+              }
+            } catch (e) {
+              setAvailableElements((fv[elementKey].values || []).map((item: any) => ({ value: item.value, count: item.count || 0 })));
+            }
+          } else {
+            setAvailableElements((fv[elementKey].values || []).map((item: any) => ({ value: item.value, count: item.count || 0 })));
+          }
+        } else {
+          setElementFieldName('');
+          setAvailableElements([]);
+        }
+        console.log('[ChartCreate] Detected element field:', elementKey);
+
+        // Detect dynamic item/product field: prefer 'item' text over itemCode/product codes
+        const itemPriority = ['item', 'itemname', 'product', 'commodity'];
+        let itemKey = '';
+        for (const cand of itemPriority) {
+          const idx = lowerKeys.indexOf(cand);
+          if (idx !== -1) { itemKey = fvKeys[idx]; break; }
+        }
+        if (!itemKey) {
+          itemKey = fvKeys.find(key => key.toLowerCase().includes('item') && !key.toLowerCase().includes('code')) || '';
+        }
+        if (!itemKey) {
+          itemKey = fvKeys.find(key => key.toLowerCase().includes('product') && !key.toLowerCase().includes('code')) || '';
+        }
+        if (!itemKey) {
+          itemKey = fvKeys.find(key => key.toLowerCase().includes('commodity') && !key.toLowerCase().includes('code')) || '';
+        }
+        if (itemKey && fv[itemKey]) {
+          setItemFieldName(itemKey);
+          if (indexName.toLowerCase().includes('crops') || indexName.toLowerCase().includes('livestock')) {
+            try {
+              const termsRes = await agriculturalAPI.getIndexTerms(indexName, {
+                field: 'item',
+                size: 100,
+                filters: { domain: 'Crops and livestock products' }
+              });
+              if (termsRes.data.success) {
+                setAvailableItems(termsRes.data.data);
+              } else {
+                const items = fv[itemKey].values || [];
+                setAvailableItems(items.map((it: any) => ({ value: it.value, count: it.count || 0 })));
+              }
+            } catch (e) {
+              const items = fv[itemKey].values || [];
+              setAvailableItems(items.map((it: any) => ({ value: it.value, count: it.count || 0 })));
+            }
+          } else {
+            const items = fv[itemKey].values || [];
+            setAvailableItems(items.map((it: any) => ({ value: it.value, count: it.count || 0 })));
+          }
+        } else {
+          setItemFieldName('');
+          setAvailableItems([]);
+        }
+        console.log('[ChartCreate] Detected item field:', itemKey);
       }
     } catch (error) {
       console.error('Error fetching additional filters:', error);
@@ -245,13 +356,26 @@ const ChartCreate: React.FC = () => {
             setSelectedYears([yearValue]);
           }
         }
-        
-        if (Array.isArray(config.filters?.element)) {
-          setSelectedElements(config.filters.element);
+
+        // Detect existing dynamic element field from config (prefer text)
+        const cfgKeys = Object.keys(config.filters || {});
+        const existingElementKey = cfgKeys.find(key => key.toLowerCase() === 'element') ||
+          cfgKeys.find(key => key.toLowerCase().includes('element')) ||
+          cfgKeys.find(key => key.toLowerCase().includes('measure'));
+        if (existingElementKey && Array.isArray(config.filters[existingElementKey])) {
+          setElementFieldName(existingElementKey);
+          setSelectedElements(config.filters[existingElementKey]);
         }
-        
-        if (Array.isArray(config.filters?.item)) {
-          setSelectedItems(config.filters.item);
+
+        // Detect existing dynamic item/product field from config (prefer 'item')
+        const existingItemKey = cfgKeys.find(key => key.toLowerCase() === 'item') ||
+          cfgKeys.find(key => key.toLowerCase().includes('item')) ||
+          cfgKeys.find(key => key.toLowerCase().includes('product')) ||
+          cfgKeys.find(key => key.toLowerCase().includes('commodity')) ||
+          cfgKeys.find(key => key.toLowerCase() === 'itemname');
+        if (existingItemKey && Array.isArray(config.filters[existingItemKey])) {
+          setItemFieldName(existingItemKey);
+          setSelectedItems(config.filters[existingItemKey]);
         }
       }
     } catch (error) {
@@ -873,8 +997,8 @@ const ChartCreate: React.FC = () => {
             </div>
           )}
 
-          {/* Element Filter */}
-          {selectedIndex && availableElements.length > 0 && (
+          {/* Element Filter (dynamic) */}
+          {selectedIndex && elementFieldName && availableElements.length > 0 && (
             <div className="bg-green-50 rounded-lg p-6 border border-green-100">
               <div className="flex items-center gap-2 mb-4">
                 <Filter className="w-5 h-5 text-green-600" />
@@ -960,8 +1084,8 @@ const ChartCreate: React.FC = () => {
             </div>
           )}
 
-          {/* Product Filter */}
-          {selectedIndex && availableItems.length > 0 && (
+          {/* Product/Item Filter (dynamic) */}
+          {selectedIndex && itemFieldName && availableItems.length > 0 && (
             <div className="bg-orange-50 rounded-lg p-6 border border-orange-100">
               <div className="flex items-center gap-2 mb-4">
                 <Filter className="w-5 h-5 text-orange-600" />
@@ -969,7 +1093,7 @@ const ChartCreate: React.FC = () => {
               </div>
               
               <p className="text-sm text-gray-600 mb-4">
-                Select the products to include in the chart
+                Select the values to include in the chart
               </p>
 
               <div className="mb-4">

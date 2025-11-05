@@ -325,6 +325,10 @@ export const agriculturalAPI = {
   getIndexAnalytics: (indexName: string, params = {}) => 
     api.get(`/agricultural/indices/${indexName}/analytics`, { params }),
 
+  // Terms aggregation with filters
+  getIndexTerms: (indexName: string, body: { field: string; size?: number; filters?: any }) =>
+    api.post(`/agricultural/indices/${indexName}/terms`, body),
+
   // Legacy analytics endpoint (deprecated)
   getAnalytics: (params = {}) => 
     api.get('/agricultural/analytics', { params }),
