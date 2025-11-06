@@ -29,7 +29,8 @@ const createEvent = async (req, res) => {
       isPublic,
       creator: creatorId
     };
-
+  
+    
     const event = await Event.create(eventData);
     res.status(201).json({ success: true, data: event });
   } catch (error) {
