@@ -105,7 +105,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5002;
 
 // Start server without requiring database connection for development
 const startServer = async () => {

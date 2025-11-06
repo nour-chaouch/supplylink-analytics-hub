@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const API_BASE = 'http://localhost:5001/api/businesses';
+const API_BASE = 'http://localhost:5002/api/businesses';
 
 const sampleBusinesses = [
   {

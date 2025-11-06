@@ -284,7 +284,7 @@ const Search: React.FC<SearchProps> = ({ initialTab = 'search' }) => {
       console.error('Failed to load indices:', err);
       const errorMessage = err.response?.data?.message 
         || err.message 
-        || (err.code === 'ECONNREFUSED' ? 'Cannot connect to backend server. Make sure it is running on port 5001.'
+        || (err.code === 'ECONNREFUSED' ? 'Cannot connect to backend server. Make sure it is running on port 5002.'
         : err.message?.includes('timeout') ? 'Request timed out. The server may be slow to respond.'
         : 'Failed to load available indices. Please check your connection and try again.');
       setError(errorMessage);

@@ -1,6 +1,18 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+// Global options for business schema
+const GlobalOptions = {
+  departments: {
+    'Agriculture': ['Crop Production', 'Livestock', 'Aquaculture'],
+    'Food Processing': ['Dairy', 'Meat Processing', 'Grain Milling'],
+    'Distribution': ['Wholesale', 'Retail', 'Logistics']
+  },
+  employeesRange: [0, 1, 2, 3, 4, 5, 10, 20, 50, 100, 200, 500, 1000],
+  businessStatuses: ['active', 'inactive', 'pending', 'suspended'],
+  days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+};
+
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -63,6 +75,10 @@ const userSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  business: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Business' 
   }
 });
 const BusinessSchema = new mongoose.Schema({
@@ -157,10 +173,9 @@ const BusinessSchema = new mongoose.Schema({
           type: String,
       }]
   }]
-})
-export const Business = mongoose.model("Business", BusinessSchema)
+});
 
-business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business' },
+const Business = mongoose.model("Business", BusinessSchema);
 // Encrypt password using bcrypt
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) {
@@ -176,3 +191,4 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
 };
 
 module.exports = mongoose.model('User', userSchema);
+module.exports.Business = Business;

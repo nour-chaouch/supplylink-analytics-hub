@@ -77,7 +77,7 @@ export const SystemSettingsProvider: React.FC<SystemSettingsProviderProps> = ({ 
       
       // Provide more specific error messages
       if (err.code === 'ECONNREFUSED' || err.message.includes('Network Error')) {
-        setError('Backend server is not running. Please start the backend server on port 5001.');
+        setError('Backend server is not running. Please start the backend server on port 5002.');
       } else if (err.response?.status === 500) {
         setError('Backend server error. Please check the server logs.');
       } else {

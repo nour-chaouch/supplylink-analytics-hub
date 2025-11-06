@@ -19,6 +19,7 @@
     "*.temp"
   ],
   "ext": "js,json",
+  "exec": "node server.js",
   "env": {
     "NODE_ENV": "development"
   },

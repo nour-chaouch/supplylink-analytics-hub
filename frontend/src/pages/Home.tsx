@@ -127,7 +127,7 @@ const Home: React.FC = () => {
         console.error('Error fetching indices:', err);
         const errorMessage = err.response?.data?.message 
           || err.message 
-          || (err.code === 'ECONNREFUSED' ? 'Cannot connect to backend server. Make sure it is running on port 5001.'
+          || (err.code === 'ECONNREFUSED' ? 'Cannot connect to backend server. Make sure it is running on port 5002.'
           : err.message?.includes('timeout') ? 'Request timed out. The server may be slow to respond.'
           : 'Failed to load indices. Please check your connection and try again.');
         setError(errorMessage);

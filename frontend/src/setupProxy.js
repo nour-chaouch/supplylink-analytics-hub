@@ -13,7 +13,7 @@ module.exports = function(app) {
   app.use(
     '/api',
     createProxyMiddleware({
-      target: 'http://localhost:5001',
+      target: 'http://localhost:5002',
       changeOrigin: true,
       secure: false,
       logLevel: 'debug',
@@ -23,9 +23,9 @@ module.exports = function(app) {
         console.error('Full error:', err);
         
         // Provide more helpful error messages based on error type
-        let errorMessage = 'Backend server may not be running on port 5001';
+        let           errorMessage = 'Backend server may not be running on port 5002';
         if (err.code === 'ECONNREFUSED') {
-          errorMessage = 'Connection refused - Backend server is not running on port 5001. Please start it with: cd backend && npm start';
+          errorMessage = 'Connection refused - Backend server is not running on port 5002. Please start it with: cd backend && npm start';
         } else if (err.code === 'ETIMEDOUT') {
           errorMessage = 'Connection timeout - Backend server may be slow to respond or not running';
         } else if (err.code === 'ENOTFOUND') {
@@ -40,7 +40,7 @@ module.exports = function(app) {
         });
       },
       onProxyReq: (proxyReq, req, res) => {
-        console.log(`[PROXY] ${req.method} ${req.url} -> http://localhost:5001${req.url}`);
+        console.log(`[PROXY] ${req.method} ${req.url} -> http://localhost:5002${req.url}`);
       },
       onProxyRes: (proxyRes, req, res) => {
         console.log(`[PROXY] ${proxyRes.statusCode} ${req.method} ${req.url}`);

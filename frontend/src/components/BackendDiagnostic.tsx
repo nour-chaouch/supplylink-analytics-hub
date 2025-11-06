@@ -114,8 +114,8 @@ const BackendDiagnostic: React.FC = () => {
               <h3 className="text-sm font-medium text-blue-800">Troubleshooting</h3>
               <div className="mt-2 text-sm text-blue-700">
                 <ul className="list-disc list-inside space-y-1">
-                  <li>Make sure the backend server is running on port 5001</li>
-                  <li>Check that no other service is using port 5001</li>
+                  <li>Make sure the backend server is running on port 5002</li>
+                  <li>Check that no other service is using port 5002</li>
                   <li>Verify the backend server started without errors</li>
                   <li>Check the browser console for additional error details</li>
                 </ul>

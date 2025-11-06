@@ -124,7 +124,7 @@ const AllSettings: React.FC = () => {
       if (error.response?.data?.message) {
         setMessage({ type: 'error', text: error.response.data.message });
       } else if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
-        setMessage({ type: 'error', text: 'Cannot connect to backend server. Please ensure the backend is running on port 5001.' });
+        setMessage({ type: 'error', text: 'Cannot connect to backend server. Please ensure the backend is running on port 5002.' });
       } else {
         setMessage({ type: 'error', text: 'Failed to save settings. Please try again.' });
       }

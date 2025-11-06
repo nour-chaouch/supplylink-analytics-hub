@@ -21,10 +21,10 @@ check-backend.bat
 ### Option 4: Manual check
 ```powershell
 # Check if port is in use
-netstat -ano | findstr :5001
+netstat -ano | findstr :5002
 
 # Test health endpoint
-curl http://localhost:5001/api/health
+curl http://localhost:5002/api/health
 ```
 
 ## Starting the Backend Server
@@ -40,9 +40,9 @@ This will start the server with nodemon (auto-restart on file changes).
 
 ## Troubleshooting
 
-### Port 5001 is in use but backend not responding
+### Port 5002 is in use but backend not responding
 - The process may have crashed
-- Stop the process: Find PID using `netstat -ano | findstr :5001`, then `taskkill /PID <PID> /F`
+- Stop the process: Find PID using `netstat -ano | findstr :5002`, then `taskkill /PID <PID> /F`
 - Restart the backend: `cd backend && npm start`
 
 ### Connection refused errors
@@ -57,16 +57,16 @@ This will start the server with nodemon (auto-restart on file changes).
 
 ## Default Configuration
 
-- **Port**: 5001 (configurable via `PORT` environment variable)
-- **Health endpoint**: `http://localhost:5001/api/health`
-- **Frontend proxy**: Configured to proxy `/api/*` requests to `http://localhost:5001`
+- **Port**: 5002 (configurable via `PORT` environment variable)
+- **Health endpoint**: `http://localhost:5002/api/health`
+- **Frontend proxy**: Configured to proxy `/api/*` requests to `http://localhost:5002`
 
 ## Environment Variables
 
 Create a `.env` file in the `backend` directory with:
 
 ```env
-PORT=5001
+PORT=5002
 NODE_ENV=development
 MONGO_URI=your_mongodb_connection_string (optional)
 ELASTICSEARCH_URL=http://localhost:9200 (optional)

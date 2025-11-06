@@ -7,7 +7,7 @@
 
 const http = require('http');
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5002;
 const HEALTH_URL = `http://localhost:${PORT}/api/health`;
 
 console.log('🔍 Checking backend server status...\n');
@@ -20,7 +20,7 @@ const server = net.createServer();
 
 server.once('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.log('✅ Port 5001 is in use (server likely running)');
+    console.log('✅ Port 5002 is in use (server likely running)');
     checkHealthEndpoint();
   } else {
     console.log(`❌ Error checking port: ${err.message}`);
@@ -29,7 +29,7 @@ server.once('error', (err) => {
 });
 
 server.once('listening', () => {
-  console.log('❌ Port 5001 is NOT in use - backend server is NOT running');
+    console.log('❌ Port 5002 is NOT in use - backend server is NOT running');
   console.log('\n📝 To start the backend server, run:');
   console.log('   cd backend');
   console.log('   npm start');

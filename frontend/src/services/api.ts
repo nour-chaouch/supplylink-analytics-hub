@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'http://localhost:5001/api' 
+  ? 'http://localhost:5002/api' 
   : '/api';
 
 // Create axios instance
@@ -42,7 +42,7 @@ api.interceptors.response.use(
     
     // Handle network errors
     if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
-      console.error('Backend server connection failed. Make sure the backend is running on port 5001.');
+      console.error('Backend server connection failed. Make sure the backend is running on port 5002.');
     }
     
     return Promise.reject(error);
