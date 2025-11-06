@@ -29,7 +29,7 @@ const UserLayout: React.FC = () => {
 
   const mainNavigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Search & Analytics', href: '/search', icon: Search },
+    { name: 'teams', href: '/search', icon: Search },
     { name: 'Graphiques', href: '/charts', icon: BarChart3 },
     { name: 'Calendrier', href: '/events', icon: Calendar },
   ];
@@ -112,38 +112,7 @@ const UserLayout: React.FC = () => {
                 );
               })}
 
-              {adminNavigation.length > 0 && (
-                <>
-                  <div className="px-2 my-4">
-                    <div className="border-t border-gray-200"></div>
-                  </div>
-                  <div className="px-2 mb-2">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Administration</p>
-                  </div>
-                  {adminNavigation.map((item) => {
-                    const Icon = item.icon;
-                    const active = isActive(item.href);
-                    return (
-                      <Link
-                        key={item.name}
-                        to={item.href}
-                        className={`${
-                          active
-                            ? 'bg-gradient-to-r from-purple-500 to-blue-600 text-white shadow-md'
-                            : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-                        } group flex items-center justify-between px-3 py-3 text-base font-medium rounded-lg transition-all duration-200`}
-                        onClick={() => setSidebarOpen(false)}
-                      >
-                        <div className="flex items-center">
-                          <Icon className={`mr-3 h-5 w-5 ${active ? 'text-white' : 'text-gray-500 group-hover:text-gray-700'}`} />
-                          <span>{item.name}</span>
-                        </div>
-                        {active && <ChevronRight className="h-4 w-4 text-white" />}
-                      </Link>
-                    );
-                  })}
-                </>
-              )}
+             
             </nav>
           </div>
 
@@ -227,37 +196,7 @@ const UserLayout: React.FC = () => {
                   );
                 })}
 
-                {adminNavigation.length > 0 && (
-                  <>
-                    <div className="px-3 my-5">
-                      <div className="border-t border-gray-200"></div>
-                    </div>
-                    <div className="px-3 mb-3">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Administration</p>
-                    </div>
-                    {adminNavigation.map((item) => {
-                      const Icon = item.icon;
-                      const active = isActive(item.href);
-                      return (
-                        <Link
-                          key={item.name}
-                          to={item.href}
-                          className={`${
-                            active
-                              ? 'bg-gradient-to-r from-purple-500 to-blue-600 text-white shadow-lg transform scale-[1.02]'
-                              : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-                          } group flex items-center justify-between px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 hover:shadow-md`}
-                        >
-                          <div className="flex items-center">
-                            <Icon className={`mr-3 h-5 w-5 transition-transform ${active ? 'text-white' : 'text-gray-500 group-hover:text-gray-700 group-hover:scale-110'}`} />
-                            <span className="font-medium">{item.name}</span>
-                          </div>
-                          {active && <ChevronRight className="h-4 w-4 text-white animate-pulse" />}
-                        </Link>
-                      );
-                    })}
-                  </>
-                )}
+              
               </nav>
             </div>
 

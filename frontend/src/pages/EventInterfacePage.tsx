@@ -504,33 +504,7 @@ const EventInterfacePage: React.FC = () => {
         </div>
 
         {/* Description Section */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center">
-              <FileText className="h-6 w-6 text-gray-700 mr-3" />
-              <h2 className="text-2xl font-bold text-gray-900">Description</h2>
-            </div>
-            {isCreator && (
-              <button
-                onClick={() => setShowEditModal(true)}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <PencilIcon className="h-4 w-4 mr-2" />
-                Modifier
-              </button>
-            )}
-          </div>
-          {event.description ? (
-            <div className="prose max-w-none">
-              <p className="text-gray-700 leading-relaxed">{event.description}</p>
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg">Aucune description fournie</p>
-            </div>
-          )}
-        </div>
+        
 
         {/* Teams Section */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 mb-6">
