@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Event = require('../models/Event');
 const { sendTeamInvite } = require('../utils/sendEmail');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 
 // Créer team + Invites
 exports.createTeam = async (req, res) => {
@@ -87,6 +88,71 @@ exports.createTeam = async (req, res) => {
   }
 };
 
+
+// Récupérer teams de l'user + events liés
+exports.getUserTeamsAndEvents = async (req, res) => {
+  try {
+    // Utiliser req.user.id depuis le middleware protect
+    const userId = req.user?.id || req.params.userId;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentification requise' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ success: false, error: 'ID user invalide' });
+    }
+
+    // Fetch teams où user est membre
+    const teams = await Team.find({ members: userId, status: 'active' })
+      .populate('creator', 'name email') // Populate creator
+      .populate('members', 'name email') // Populate members
+      .populate('linkedEventId', 'title description start end type isPublic creator') // Populate event lié
+      .sort({ createdAt: -1 }); // Plus récent en premier
+
+    // Récupérer les événements liés aux équipes
+    const eventIds = teams
+      .map(team => team.linkedEventId)
+      .filter(id => id != null)
+      .map(id => id._id || id);
+
+    // Fetch events créés par l'user
+    const userCreatedEvents = await Event.find({ creator: userId })
+      .populate('creator', 'name email')
+      .sort({ start: -1 });
+
+    // Fetch events liés aux équipes où l'user est membre
+    const linkedEvents = eventIds.length > 0 
+      ? await Event.find({ _id: { $in: eventIds } })
+          .populate('creator', 'name email')
+          .sort({ start: -1 })
+      : [];
+
+    // Récupérer les équipes pour chaque événement lié
+    const eventsWithTeams = await Promise.all(
+      linkedEvents.map(async (event) => {
+        const eventTeams = await Team.find({ linkedEventId: event._id })
+          .populate('creator', 'name email')
+          .populate('members', 'name email');
+        const eventObj = event.toObject();
+        eventObj.teams = eventTeams;
+        return eventObj;
+      })
+    );
+
+    res.json({ 
+      success: true, 
+      data: {
+        teams: teams.map(team => team.toObject()),
+        userCreatedEvents: userCreatedEvents.map(event => event.toObject()),
+        linkedEvents: eventsWithTeams
+      } 
+    });
+  } catch (error) {
+    console.error('Erreur getUserTeamsAndEvents:', error);
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
 // Accepter invite
 exports.acceptInvite = async (req, res) => {
   try {
