@@ -27,6 +27,8 @@ import EventsPage from './pages/EventsPage';
 import EventInterfacePage from './pages/EventInterfacePage';
 import UserLayout from './components/UserLayout';
 import TeamInviteAccept from './pages/TeamInviteAccept';
+import EventTeamPage from './components/EventTeamPage';
+import MyTeamsAndEvents from './pages/MyTeamsAndEvents';
 
 function App() {
   return (
@@ -67,14 +69,26 @@ function App() {
                     <Route index element={<Dashboard />} />
                   </Route>
 
-                  {/* Events routes - require login, avec Layout */}
-                <Route path="/events" element={
-  <ProtectedRoute>
-    <UserLayout />
-  </ProtectedRoute>
-}>
-  <Route index element={<EventsPage />} />
-  <Route path=":eventId" element={<EventInterfacePage />} /> // Nouvelle route pour interface dédiée
+               {/* Events routes - require login, avec Layout */}
+<Route
+  path="/"
+  element={
+    <ProtectedRoute>
+      <UserLayout />
+    </ProtectedRoute>
+  }
+>
+  {/* Toutes les routes protégées sous UserLayout */}
+  <Route path="events">
+    <Route index element={<EventsPage />} />
+    <Route path=":eventId" element={<EventInterfacePage />} /> {/* Nouvelle route pour interface dédiée */}
+  </Route>
+
+  {/* ➕ Ajout de EventTeamPage dans le même bloc */}
+  <Route path="EventTeamPage" element={<EventTeamPage />} />
+  
+  {/* Route pour mes équipes et événements */}
+  <Route path="my-teams-events" element={<MyTeamsAndEvents />} />
 </Route>
 
                   {/* Charts list and view use app Layout; create/edit standalone without sidebar */}

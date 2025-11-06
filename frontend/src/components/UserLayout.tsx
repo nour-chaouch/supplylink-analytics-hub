@@ -14,7 +14,8 @@ import {
   X,
   Shield,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Users
 } from 'lucide-react';
 
 const UserLayout: React.FC = () => {
@@ -32,6 +33,7 @@ const UserLayout: React.FC = () => {
     { name: 'teams', href: '/search', icon: Search },
     { name: 'Graphiques', href: '/charts', icon: BarChart3 },
     { name: 'Calendrier', href: '/events', icon: Calendar },
+    { name: 'Mes Équipes', href: '/my-teams-events', icon: Users },
   ];
 
   const adminNavigation = user?.role === 'admin' ? [
