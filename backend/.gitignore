@@ -7,4 +7,3 @@ dist/
 # CSV output files from Python scripts
 scripts/csv_output/bulk_csv_output
 *.csv
-*.json
